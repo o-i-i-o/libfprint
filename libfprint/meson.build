@@ -130,6 +130,14 @@ driver_sources = {
         'drivers/synaptics/synaptics.c',
         'drivers/synaptics/bmkt_message.c',
     ),
+    'goodix5042' : files(
+        'drivers/goodix5042/goodix5042.c',
+        'drivers/goodix5042/goodix5042-proto.c',
+        'drivers/goodix5042/goodix5042-image.c',
+        'drivers/goodix5042/goodix5042-match.c',
+        'drivers/goodix5042/goodix5042-match-image.c',
+        'drivers/goodix5042/goodix5042-match-keypoints.c',
+    ),
     'goodixmoc' : files(
         'drivers/goodixmoc/goodix.c',
         'drivers/goodixmoc/goodix_proto.c',
