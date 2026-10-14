@@ -493,7 +493,8 @@ fpi_spi_transfer_submit_sync (FpiSpiTransfer *transfer,
 
   log_transfer (transfer, FALSE, err);
 
-  g_propagate_error (error, err);
+  if (err)
+    g_propagate_error (error, err);
 
   return res;
 }
