@@ -134,6 +134,7 @@ drivers_info = {
     'egis_etu905': {},
     'vcom5s': {},
     'synaptics': {},
+    'syna_00dc': { 'helper': ['openssl'] },
     'elan': { 'endian_dependent': true },
     'elanmoc': {},
     'uru4000': { 'helper': ['openssl'] },
