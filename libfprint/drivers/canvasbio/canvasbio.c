@@ -14,14 +14,9 @@
  * DRIVER OVERVIEW
  * ============================================================================
  *
- * DRIVER VERSION TAG: V45
- * Keep this tag updated at every iteration to make runtime/source identification
- * unambiguous across logs, backups and manual syncs.
- *
  * Current Linux implementation uses the host-side matching path (MoH behavior):
  * the sensor captures a raw grayscale image, and the driver performs image-based
- * NCC matching. A runtime-gated skeleton hook exists for future
- * device-assisted verify experiments without changing the default behavior.
+ * NCC matching.
  *
  * Device specifications:
  *   - Vendor ID:  0x2DF0 (CanvasBio)
@@ -42,16 +37,13 @@
  * First cycle does USB reset + full activation. Subsequent cycles do soft rearm:
  *
  *   HARD_RESET -> INIT_CONFIG -> SETTLE_DELAY -> WAIT_FINGER ->
- *   CAPTURE_START -> READ_IMAGE -> FINALIZE -> VERIFY_RESULT_STATUS ->
- *   VERIFY_READY_QUERY_A -> VERIFY_READY_QUERY_B -> VERIFY_READY_DECIDE ->
- *   SUBMIT_IMAGE ->
+ *   CAPTURE_START -> READ_IMAGE -> FINALIZE -> SUBMIT_IMAGE ->
  *   WAIT_REMOVAL -> REARM -> [next cycle]
  *
  * ============================================================================
  */
 
 #define FP_COMPONENT "canvasbio"
-#define CB2000_DRIVER_VERSION_TAG "V45"
 
 #include "drivers_api.h"
 #include <string.h>  /* For memcpy/strlen */
@@ -92,9 +84,6 @@
 
 /* Validation thresholds */
 #define CB2000_POLL_DEBOUNCE_COUNT 1
-#define CB2000_POLL_STALE_TIMEOUT_MS 12000  /* ~12s max wait for finger */
-#define CB2000_EARLY_PLACEMENT_POLLS 0      /* disabled (Windows parity) */
-#define CB2000_EARLY_PLACEMENT_DELAY_MS 400
 #define CB2000_REMOVAL_STABLE_OFF_COUNT 2
 #define CB2000_REMOVAL_STALE_TIMEOUT_MS 10000 /* ~10s max wait for removal */
 #define CB2000_MIN_IMAGE_VARIANCE 3000.0
@@ -111,8 +100,6 @@
 #define CB2000_MIN_FOCUS_VARIANCE 500.0
 /* Foreground threshold used for RE-style area/overlap heuristics. */
 #define CB2000_FOREGROUND_THRESHOLD 32
-/* Some PCAPs show an alternate detect value for reg 0x51. */
-#define CB2000_USE_ALT_DETECT_51 0
 
 #define CB2000_PRINT_FORMAT "(uqq@ay)"
 
@@ -138,15 +125,13 @@
 
 /* Master cycle SSM - one complete capture cycle */
 typedef enum {
-  CYCLE_RECOVERY,            /* Explicit recovery state */
   CYCLE_HARD_RESET,          /* USB reset + reclaim interface */
   CYCLE_INIT_CONFIG,         /* Full activation via sub-SSM */
   CYCLE_SETTLE_DELAY,        /* Post-init stabilization timer */
   CYCLE_WAIT_FINGER,         /* Finger polling via sub-SSM */
-  CYCLE_EARLY_PLACEMENT_DELAY,   /* Extra delay if finger too early */
   CYCLE_CAPTURE_START,       /* Capture start commands via sub-SSM */
   CYCLE_READ_IMAGE,          /* Image read (20 chunks) via sub-SSM */
-  CYCLE_FINALIZE,            /* Capture finalize commands via sub-SSM */    /* Verify READY: decide route from query */
+  CYCLE_FINALIZE,            /* Capture finalize commands via sub-SSM */
   CYCLE_SUBMIT_IMAGE,        /* Submit image to libfprint */
   CYCLE_WAIT_REMOVAL,        /* Finger removal polling via sub-SSM */
   CYCLE_REARM,               /* Soft rearm between captures */
@@ -174,7 +159,7 @@ typedef enum {
   IMG_READ_NUM,
 } ImageReadState;
 
-/* Activation sub-SSM (existing, used by CYCLE_INIT_CONFIG) */
+/* Activation sub-SSM (used by CYCLE_INIT_CONFIG) */
 typedef enum {
   STATE_ACTIVATE_WAKE_SEQ,
   STATE_ACTIVATE_REGS_SEQ,
@@ -218,41 +203,8 @@ typedef enum {
   CB2000_RETRY_BACKGROUND_CAPTURE = 0,
   CB2000_RETRY_AREA_GATE,
   CB2000_RETRY_QUALITY_GATE,
-  CB2000_RETRY_MINUTIAE_PRECHECK,
-  CB2000_RETRY_DEVICE_STATUS,
   CB2000_RETRY_ENROLL_CONSISTENCY,
-  CB2000_RETRY_CAUSE_COUNT,
 } Cb2000RetryCause;
-
-typedef enum {
-  CB2000_VERIFY_ACK_UNKNOWN = 0,
-  CB2000_VERIFY_ACK_READY,
-  CB2000_VERIFY_ACK_RETRY,
-  CB2000_VERIFY_ACK_DEVICE_NOMATCH,
-} Cb2000VerifyAckDecision;
-
-typedef enum {
-  CB2000_VERIFY_ROUTE_UNKNOWN = 0,
-  CB2000_VERIFY_ROUTE_HOST_NBIS,
-  CB2000_VERIFY_ROUTE_DEVICE_STATUS,
-  CB2000_VERIFY_ROUTE_DEVICE_NOMATCH,
-  CB2000_VERIFY_ROUTE_RETRY_GATE,
-} Cb2000VerifyRoute;
-
-typedef enum {
-  CB2000_VERIFY_RESULT_CLASS_UNKNOWN = 0,
-  CB2000_VERIFY_RESULT_CLASS_READY,
-  CB2000_VERIFY_RESULT_CLASS_RETRY,
-  CB2000_VERIFY_RESULT_CLASS_DEVICE_NOMATCH,
-  CB2000_VERIFY_RESULT_CLASS_COUNT,
-} Cb2000VerifyResultClass;
-
-typedef enum {
-  CB2000_VERIFY_READY_MATRIX_UNKNOWN = 0,
-  CB2000_VERIFY_READY_MATRIX_READY,
-  CB2000_VERIFY_READY_MATRIX_RETRY,
-  CB2000_VERIFY_READY_MATRIX_DEVICE_NOMATCH,
-} Cb2000VerifyReadyMatrixDecision;
 
 /* ============================================================================
  * DEVICE STRUCTURE
@@ -261,12 +213,8 @@ struct _FpiDeviceCanvasbio
 {
   FpDevice parent;
 
-  /* Lifecycle */
-  gboolean deactivating;
-  gboolean deactivation_in_progress;
-
   /* NCC enrollment state */
-  guint8        *enroll_images[5];
+  guint8        *enroll_images[CB2000_NR_ENROLL_STAGES];
   gint           enroll_stage;
   guint          enroll_gate_rejects;
   FpiMatchResult verify_result;
@@ -281,20 +229,17 @@ struct _FpiDeviceCanvasbio
   gint     chunks_read;
 
   /* Polling counters (reset each sub-SSM) */
-  gint     poll_stable_hits;
-  gint     no_finger_streak;
-  gint     removal_poll_count;
-  gint     removal_stable_off_hits;
-  gint     poll_total_count;
-  gboolean early_placement_detected;
-  gint64   poll_start_us;
-  gint64   removal_start_us;
+  gint   poll_stable_hits;
+  gint   no_finger_streak;
+  gint   removal_poll_count;
+  gint   removal_stable_off_hits;
+  gint   poll_total_count;
+  gint64 poll_start_us;
+  gint64 removal_start_us;
 
   /* SSM tracking */
-  FpiSsm  *cycle_ssm;                 /* Master cycle SSM (single reference) */
-  gboolean force_recovery;
+  FpiSsm  *cycle_ssm;
   gboolean initial_activation_done;
-
 };
 
 G_DECLARE_FINAL_TYPE (FpiDeviceCanvasbio, fpi_device_canvasbio, FPI, DEVICE_CANVASBIO, FpDevice)
@@ -354,19 +299,11 @@ static const guint8 data_cap_259[259] = {0xa8, 0x06};
 /* Detection mode calibration values */
 static const guint8 data_cap_5d_detect[] = {0xa9, 0x5d, 0x3d, 0x00};
 static const guint8 data_cap_51_detect[] = {0xa9, 0x51, 0xa8, 0x01};
-static const guint8 data_cap_51_detect_alt[] = {0xa9, 0x51, 0x68, 0x01};
 /* Capture mode calibration values (post-detection) */
 static const guint8 data_cap_5d_capture[] = {0xa9, 0x5d, 0x4d, 0x00};
 static const guint8 data_cap_51_capture[] = {0xa9, 0x51, 0x88, 0x01};
 /* Chunk padding (256 zeros) */
 static const guint8 data_padding[256] = {0};
-
-/*
- * Verify READY complementary status query.
- * This mirrors the RE "status execute/query then commit class" split:
- * we ask one extra status sample after finalize before host matcher fallback.
- */
-
 
 /* ============================================================================
  * COMMAND TABLES
@@ -454,8 +391,7 @@ static const Cb2000Command activation_capture_cmds[] = {
   {CMD_BULK_OUT, 0, 0, 0, data_cap_5d_detect, 4},
   {CMD_CTRL_IN, REQ_STATUS, 0x0000, 0, NULL, 4},
   {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0,
-   CB2000_USE_ALT_DETECT_51 ? data_cap_51_detect_alt : data_cap_51_detect, 4},
+  {CMD_BULK_OUT, 0, 0, 0, data_cap_51_detect, 4},
   {CMD_CTRL_IN, REQ_STATUS, 0x0000, 0, NULL, 4},
   {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 3, NULL, 0},
   {CMD_BULK_OUT, 0, 0, 0, data_cap_03, 3},
@@ -509,8 +445,7 @@ static const Cb2000Command rearm_cmds[] = {
   {CMD_BULK_OUT, 0, 0, 0, data_cap_5d_detect, 4},
   {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
   {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0,
-   CB2000_USE_ALT_DETECT_51 ? data_cap_51_detect_alt : data_cap_51_detect, 4},
+  {CMD_BULK_OUT, 0, 0, 0, data_cap_51_detect, 4},
   {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
   {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 3, NULL, 0},
   {CMD_BULK_OUT, 0, 0, 0, data_cap_03, 3},
@@ -607,86 +542,8 @@ static const Cb2000Command capture_start_cmds[] = {
   {CMD_END, 0, 0, 0, NULL, 0}
 };
 
-/*
- * Verify-specific start sequence.
- * Kept as a dedicated table (even if currently equal to capture_start_cmds)
- * so we can evolve verify 1:1 without impacting enroll/capture flow.
- */
-static const Cb2000Command verify_start_cmds[] = {
-  /* Phase 2: First capture trigger + quality response */
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 3, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_read_08, 3},
-  {CMD_BULK_IN,  0, 0, 0, NULL, 3},         /* First capture quality: ff:00:XX */
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_09, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_3e, 4},
-  {CMD_BULK_IN,  0, 0, 0, NULL, 4},         /* Quality ACK: ff:00:YY:ZZ */
-  /* Phase 3: Post-quality config */
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_03_4b, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_20, 4},
-  {CMD_BULK_IN,  0, 0, 0, NULL, 4},         /* Status #2: ff:00:01:07 */
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 3, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_0d, 3},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_10_alt, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_26_4b, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_09, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 3, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_0c, 3},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_20, 4},
-  {CMD_BULK_IN,  0, 0, 0, NULL, 4},         /* Status #3: ff:00:01:02 */
-  /* Phase 4: Calibration + second capture trigger */
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_5d_capture, 4},
-  {CMD_CTRL_IN, REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_51_capture, 4},
-  {CMD_CTRL_IN, REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_04_4b, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_09, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 5123, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_259, 259},
-  {CMD_END, 0, 0, 0, NULL, 0}
-};
-
 /* Capture finalize sequence (PCAP-aligned) */
 static const Cb2000Command capture_finalize_cmds[] = {
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_09, 4},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_3e, 4},
-  {CMD_BULK_IN,  0, 0, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0003, 4, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_3e, 4},
-  {CMD_BULK_IN,  0, 0, 0, NULL, 4},
-  {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 3, NULL, 0},
-  {CMD_BULK_OUT, 0, 0, 0, data_cap_0d, 3},
-  {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
-  {CMD_END, 0, 0, 0, NULL, 0}
-};
-
-/*
- * Verify-specific finalize sequence.
- * Dedicated table to isolate verify evolution from enroll/capture behavior.
- */
-static const Cb2000Command verify_finalize_cmds[] = {
   {CMD_CTRL_OUT, REQ_CONFIG, 0x0002, 4, NULL, 0},
   {CMD_BULK_OUT, 0, 0, 0, data_cap_09, 4},
   {CMD_CTRL_IN,  REQ_STATUS, 0x0000, 0, NULL, 4},
@@ -715,39 +572,7 @@ static void cmd_transfer_cb (FpiUsbTransfer *transfer,
                              GError         *error);
 static const char *cb2000_cmd_type_to_str (Cb2000CmdType type);
 static gboolean cb2000_is_verify_phase_action (FpiDeviceAction action);
-static const char *cb2000_capture_start_seq_name_for_action (FpiDeviceAction action);
-static const char *cb2000_capture_finalize_seq_name_for_action (FpiDeviceAction action);
-static void cb2000_log_cmd_rx_data (FpDevice               *dev,
-                                    const Cb2000CmdContext *ctx,
-                                    const Cb2000Command    *cmd,
-                                    const FpiUsbTransfer   *transfer);
 static void start_new_cycle (FpDevice *dev);
-
-/* Invert grayscale image in-place (sensor outputs inverted polarity). */
-static void G_GNUC_UNUSED
-invert_image_u8 (guint8 *data, gsize len)
-{
-  for (gsize i = 0; i < len; i++)
-    data[i] = 0xff - data[i];
-}
-
-
-/*
- * Parse a boolean env var with explicit defaults.
- * Accepted true values: 1,true,yes,on
- * Accepted false values: 0,false,no,off
- */
-static gboolean
-cb2000_get_env_bool (const gchar *name, gboolean default_value)
-{
-  return default_value;
-}
-
-static int
-cb2000_parse_upscale_value (const gchar *v, int default_value)
-{
-  return default_value;
-}
 
 static int
 cb2000_get_env_int (const gchar *name,
@@ -768,113 +593,6 @@ cb2000_get_env_int (const gchar *name,
     out = max_value;
 
   return out;
-}
-
-
-
-
-/*
- * Retry-class status pairs observed in Windows captures.
- * We keep this conservative: unknown values never become hard decisions.
- */
-
-
-
-
-
-
-
-
-
-
-
-static int
-cb2000_get_upscale_factor (FpiDeviceAction action)
-{
-  const gchar *v_phase = NULL;
-  const gchar *v_global = g_getenv ("CB2000_UPSCALE");
-  int action_default = 1;
-
-  /*
-   * Keep preprocess parity between template generation and matching:
-   * enroll/verify/identify default to 2x, capture remains 1x.
-   */
-  switch (action)
-    {
-    case FPI_DEVICE_ACTION_NONE:
-    case FPI_DEVICE_ACTION_PROBE:
-    case FPI_DEVICE_ACTION_OPEN:
-    case FPI_DEVICE_ACTION_CLOSE:
-    case FPI_DEVICE_ACTION_LIST:
-    case FPI_DEVICE_ACTION_DELETE:
-    case FPI_DEVICE_ACTION_CLEAR_STORAGE:
-      break;
-
-    case FPI_DEVICE_ACTION_VERIFY:
-      action_default = 1;
-      v_phase = g_getenv ("CB2000_VERIFY_UPSCALE");
-      break;
-
-    case FPI_DEVICE_ACTION_IDENTIFY:
-      action_default = 1;
-      v_phase = g_getenv ("CB2000_IDENTIFY_UPSCALE");
-      break;
-
-    case FPI_DEVICE_ACTION_ENROLL:
-      action_default = 1;
-      v_phase = g_getenv ("CB2000_ENROLL_UPSCALE");
-      break;
-
-    case FPI_DEVICE_ACTION_CAPTURE:
-      v_phase = g_getenv ("CB2000_CAPTURE_UPSCALE");
-      break;
-
-    default:
-      break;
-    }
-
-  if (v_phase && *v_phase)
-    return cb2000_parse_upscale_value (v_phase, action_default);
-
-  return cb2000_parse_upscale_value (v_global, action_default);
-}
-
-/*
- * Background subtraction helps remove fixed-pattern noise in enroll/capture.
- * Default is configured per action via env knobs, with verify/identify mapped
- * by CB2000_VERIFY_BG_SUBTRACT and others by CB2000_BG_SUBTRACT.
- */
-static gboolean
-cb2000_should_apply_bg_subtraction (FpiDeviceAction action)
-{
-  /* Keep verify/identify aligned with enroll defaults for NBIS matching. */
-  if (action == FPI_DEVICE_ACTION_VERIFY)
-    return cb2000_get_env_bool ("CB2000_VERIFY_BG_SUBTRACT", TRUE);
-
-  if (action == FPI_DEVICE_ACTION_IDENTIFY)
-    {
-      const gchar *v_identify = g_getenv ("CB2000_IDENTIFY_BG_SUBTRACT");
-      if (v_identify && *v_identify)
-        return cb2000_get_env_bool ("CB2000_IDENTIFY_BG_SUBTRACT", TRUE);
-      return cb2000_get_env_bool ("CB2000_VERIFY_BG_SUBTRACT", TRUE);
-    }
-
-  if (action == FPI_DEVICE_ACTION_ENROLL)
-    {
-      const gchar *v_enroll = g_getenv ("CB2000_ENROLL_BG_SUBTRACT");
-      if (v_enroll && *v_enroll)
-        return cb2000_get_env_bool ("CB2000_ENROLL_BG_SUBTRACT", TRUE);
-      return cb2000_get_env_bool ("CB2000_BG_SUBTRACT", TRUE);
-    }
-
-  if (action == FPI_DEVICE_ACTION_CAPTURE)
-    {
-      const gchar *v_capture = g_getenv ("CB2000_CAPTURE_BG_SUBTRACT");
-      if (v_capture && *v_capture)
-        return cb2000_get_env_bool ("CB2000_CAPTURE_BG_SUBTRACT", TRUE);
-    }
-
-  return cb2000_get_env_bool ("CB2000_BG_SUBTRACT", TRUE);
 }
 
 static double
@@ -900,35 +618,48 @@ cb2000_get_ppmm (void)
   return CB2000_PPMM_DEFAULT;
 }
 
-static gboolean
-cb2000_should_precheck_minutiae (FpiDeviceAction action)
-{
-  const char *v = g_getenv ("CB2000_PRECHECK_MINUTIAE");
-
-  if (v && *v && strcmp (v, "0") != 0)
-    return TRUE;
-
-  if (action == FPI_DEVICE_ACTION_VERIFY)
-    return cb2000_get_env_bool ("CB2000_PRECHECK_VERIFY", FALSE);
-
-  if (action == FPI_DEVICE_ACTION_IDENTIFY)
-    return cb2000_get_env_bool ("CB2000_PRECHECK_IDENTIFY", FALSE);
-
-  if (action == FPI_DEVICE_ACTION_ENROLL)
-    return cb2000_get_env_bool ("CB2000_PRECHECK_ENROLL", FALSE);
-
-  if (action == FPI_DEVICE_ACTION_CAPTURE)
-    return cb2000_get_env_bool ("CB2000_PRECHECK_CAPTURE", FALSE);
-
-  return FALSE;
-}
-
 static const gchar *
 cb2000_action_label (FpiDeviceAction action)
 {
-  return "";
-}
+  switch (action)
+    {
+    case FPI_DEVICE_ACTION_NONE:
+      return "NONE";
 
+    case FPI_DEVICE_ACTION_PROBE:
+      return "PROBE";
+
+    case FPI_DEVICE_ACTION_OPEN:
+      return "OPEN";
+
+    case FPI_DEVICE_ACTION_CLOSE:
+      return "CLOSE";
+
+    case FPI_DEVICE_ACTION_ENROLL:
+      return "ENROLL";
+
+    case FPI_DEVICE_ACTION_VERIFY:
+      return "VERIFY";
+
+    case FPI_DEVICE_ACTION_IDENTIFY:
+      return "IDENTIFY";
+
+    case FPI_DEVICE_ACTION_CAPTURE:
+      return "CAPTURE";
+
+    case FPI_DEVICE_ACTION_LIST:
+      return "LIST";
+
+    case FPI_DEVICE_ACTION_DELETE:
+      return "DELETE";
+
+    case FPI_DEVICE_ACTION_CLEAR_STORAGE:
+      return "CLEAR_STORAGE";
+
+    default:
+      return "UNKNOWN";
+    }
+}
 
 static int
 cb2000_get_area_min_pct (FpiDeviceAction action)
@@ -937,11 +668,9 @@ cb2000_get_area_min_pct (FpiDeviceAction action)
   int global_min = cb2000_get_env_int ("CB2000_AREA_MIN",
                                        CB2000_AREA_MIN_CAPTURE_PCT,
                                        1, 100);
-  int capture_min = 0;
+  int capture_min = cb2000_get_env_int ("CB2000_AREA_MIN_CAPTURE", global_min, 1, 100);
 
   /* Non-image actions still need explicit handling to keep -Wswitch-enum clean. */
-  capture_min = cb2000_get_env_int ("CB2000_AREA_MIN_CAPTURE", global_min, 1, 100);
-
   switch (action)
     {
     case FPI_DEVICE_ACTION_NONE:
@@ -972,46 +701,9 @@ cb2000_get_area_min_pct (FpiDeviceAction action)
     }
 }
 
-/* Internal helper: read internal NBIS subprint cardinality for telemetry only. */
-
-
-static void G_GNUC_UNUSED
-cb2000_log_preprocess_profile (FpiDeviceAction action)
-{
-  fp_info ("[ PROFILE ] action=%s bg_subtract=%d upscale=%dx precheck=%d area_min=%d",
-           cb2000_action_label (action),
-           cb2000_should_apply_bg_subtraction (action),
-           cb2000_get_upscale_factor (action),
-           cb2000_should_precheck_minutiae (action),
-           cb2000_get_area_min_pct (action));
-}
-
-static void
-cb2000_update_submit_telemetry (FpiDeviceCanvasbio *self,
-                                FpDevice           *dev,
-                                FpiDeviceAction     action)
-{
-}
-
-
-/*
- * Trilha B skeleton:
- * runtime gate for future verify path that uses device-assisted matching.
- * Current behavior intentionally falls back to host-side NBIS matching.
- */
-static gboolean G_GNUC_UNUSED
-cb2000_try_device_assisted_verify (FpiDeviceCanvasbio *self,
-                                   FpDevice           *dev,
-                                   FpImage            *img)
-{
-  return FALSE;
-}
-
-
 static void
 cb2000_retry_scan_with_cause (FpDevice        *dev,
-                              Cb2000RetryCause cause,
-                              const gchar     *detail)
+                              Cb2000RetryCause cause)
 {
   FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
   FpiDeviceAction action = fpi_device_get_current_action (dev);
@@ -1026,10 +718,6 @@ cb2000_retry_scan_with_cause (FpDevice        *dev,
   else if (cause == CB2000_RETRY_QUALITY_GATE)
     {
       retry_msg = "Image quality too low, adjust finger and try again.";
-    }
-  else if (cause == CB2000_RETRY_MINUTIAE_PRECHECK)
-    {
-      retry_msg = "Adjust finger and try again.";
     }
   else if (cause == CB2000_RETRY_ENROLL_CONSISTENCY)
     {
@@ -1057,50 +745,6 @@ cb2000_retry_scan_with_cause (FpDevice        *dev,
       return;
     }
 }
-
-typedef struct
-{
-  FpDevice       *dev;
-  FpiSsm         *ssm;
-  FpImage        *img;
-  FpiDeviceAction action;
-} Cb2000MinutiaePrecheckCtx;
-
-static void
-cb2000_minutiae_precheck_cb (GObject *source, GAsyncResult *res, gpointer user_data)
-{
-  Cb2000MinutiaePrecheckCtx *ctx = user_data;
-
-  g_autoptr(GError) error = NULL;
-
-  if (!fp_image_detect_minutiae_finish (FP_IMAGE (source), res, &error))
-    {
-      fp_dbg ("Image screening failed with error %s",
-              error ? error->message : "unknown");
-      fp_info ("Reject! Image quality too bad. (minutiae precheck)");
-      g_object_unref (ctx->img);
-      cb2000_retry_scan_with_cause (ctx->dev,
-                                    CB2000_RETRY_MINUTIAE_PRECHECK,
-                                    "(precheck)");
-      fpi_ssm_next_state (ctx->ssm);
-      g_free (ctx);
-      return;
-    }
-  if (ctx->action == FPI_DEVICE_ACTION_CAPTURE)
-    {
-      /* Capture action must complete explicitly after async precheck. */
-      fpi_device_capture_complete (ctx->dev, ctx->img, NULL);
-      fpi_ssm_mark_completed (ctx->ssm);
-      g_free (ctx);
-      return;
-    }
-
-  /* For other actions, precheck is disabled by default in V33. */
-  g_object_unref (ctx->img);
-  fpi_ssm_next_state (ctx->ssm);
-  g_free (ctx);
-}
-
 
 /*
  * Run a table-driven USB command sequence inside a sub-SSM.
@@ -1159,105 +803,6 @@ cb2000_is_verify_phase_action (FpiDeviceAction action)
   return action == FPI_DEVICE_ACTION_VERIFY ||
          action == FPI_DEVICE_ACTION_IDENTIFY;
 }
-
-static const char *
-cb2000_capture_start_seq_name_for_action (FpiDeviceAction action)
-{
-  if (cb2000_is_verify_phase_action (action))
-    return "verify_start";
-  return "capture_start_enroll";
-}
-
-static const char *
-cb2000_capture_finalize_seq_name_for_action (FpiDeviceAction action)
-{
-  if (cb2000_is_verify_phase_action (action))
-    return "verify_finalize";
-  return "capture_finalize_enroll";
-}
-
-static const Cb2000Command *
-cb2000_capture_start_cmds_for_action (FpiDeviceAction action)
-{
-  if (cb2000_is_verify_phase_action (action))
-    return verify_start_cmds;
-  return capture_start_cmds;
-}
-
-static const Cb2000Command *
-cb2000_capture_finalize_cmds_for_action (FpiDeviceAction action)
-{
-  if (cb2000_is_verify_phase_action (action))
-    return verify_finalize_cmds;
-  return capture_finalize_cmds;
-}
-
-
-
-/*
- * Log short response payloads from command-sequence reads.
- * This is used to correlate verify status bytes with RE/Windows traces.
- */
-static void
-cb2000_log_cmd_rx_data (FpDevice               *dev,
-                        const Cb2000CmdContext *ctx,
-                        const Cb2000Command    *cmd,
-                        const FpiUsbTransfer   *transfer)
-{
-}
-
-
-
-
-
-
-
-
-/*
- * Normalize verify status/result byte pairs into a stable class.
- * This class is used for routing telemetry and for optional short-circuit
- * handling when device status is explicit enough to skip host NBIS.
- */
-
-
-
-
-
-
-/*
- * V29 READY matrix decision.
- * Priority is conservative:
- *   1) any 0x02 -> RETRY
- *   2) any 0x0b -> DEVICE_NOMATCH
- *   3) A=0x00 and (B missing or B=0x00) -> READY fallback to host NBIS
- *   4) otherwise -> UNKNOWN fallback to host NBIS
- */
-
-
-/*
- * Map finalize ACKs to a verify routing decision.
- * Runtime evidence so far:
- *   ff:00:ff:0f -> capture ready, proceed to host matcher
- *   ff:00:00:00 -> retry
- *   ff:00:ff:0c -> retry (observed in poor/partial captures)
- *   ff:00:f0:0f, ff:00:f3:0f, ff:00:88:08, ff:00:11:01,
- *   ff:00:08:00, ff:00:20:0f, ff:00:00:08, ff:00:11:00,
- *   ff:00:30:0f -> retry (Windows verify failures, 2026-02-16)
- *
- * Hypothesis from Windows RE:
- *   ff:00:ff:0b -> explicit device no-match status
- */
-
-
-
-/*
- * Gate verify/identify routing using capture_finalize ACK bytes.
- * This performs only "early exits" (retry). Match/no-match decisions for
- * experimental device-assisted flow are handled later by
- * cb2000_try_device_assisted_verify().
- */
-
-
 
 /*
  * Execute the next command in the sequence by mapping each entry to a
@@ -1395,7 +940,6 @@ cmd_transfer_cb (FpiUsbTransfer *transfer,
                  gpointer        user_data,
                  GError         *error)
 {
-  FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
   Cb2000CmdContext *ctx = fpi_ssm_get_data (transfer->ssm);
   const Cb2000Command *cmd = &ctx->commands[ctx->cmd_index];
 
@@ -1427,7 +971,7 @@ cmd_transfer_cb (FpiUsbTransfer *transfer,
         }
     }
 
-  if (self->deactivating || self->deactivation_in_progress || fpi_device_action_is_cancelled (dev))
+  if (fpi_device_action_is_cancelled (dev))
     {
       fpi_ssm_mark_failed (transfer->ssm,
                            g_error_new_literal (G_IO_ERROR,
@@ -1436,7 +980,6 @@ cmd_transfer_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  cb2000_log_cmd_rx_data (dev, ctx, cmd, transfer);
   ctx->cmd_index++;
   fpi_ssm_jump_to_state (transfer->ssm, 0);
 }
@@ -1573,7 +1116,7 @@ poll_finger_result_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  if (self->deactivating || self->deactivation_in_progress || fpi_device_action_is_cancelled (dev))
+  if (fpi_device_action_is_cancelled (dev))
     {
       fpi_ssm_mark_failed (transfer->ssm,
                            g_error_new_literal (G_IO_ERROR,
@@ -1599,9 +1142,6 @@ poll_finger_result_cb (FpiUsbTransfer *transfer,
           transfer->actual_length,
           transfer->buffer[0], transfer->buffer[1],
           self->poll_stable_hits, self->no_finger_streak);
-  if (self->poll_total_count == 0)
-    fp_dbg ("WAIT_FINGER started: t0=%" G_GINT64_FORMAT "us",
-            self->poll_start_us);
 
   if (self->poll_total_count > 0 && (self->poll_total_count % 10) == 0)
     fp_dbg ("WAIT_FINGER timing: poll=%u t=+%" G_GINT64_FORMAT "us",
@@ -1611,11 +1151,6 @@ poll_finger_result_cb (FpiUsbTransfer *transfer,
     {
       self->no_finger_streak = 0;
       self->poll_stable_hits++;
-
-      /* Disabled for Windows parity (no early-placement delay). */
-      if (self->poll_total_count <= CB2000_EARLY_PLACEMENT_POLLS)
-        fp_dbg ("Early placement gate disabled (poll=%d)",
-                self->poll_total_count);
 
       if (self->poll_stable_hits >= CB2000_POLL_DEBOUNCE_COUNT)
         {
@@ -1644,11 +1179,6 @@ poll_finger_result_cb (FpiUsbTransfer *transfer,
 static void
 poll_finger_run_state (FpiSsm *ssm, FpDevice *dev)
 {
-  FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
-
-  if (self->deactivating || self->deactivation_in_progress)
-    return;
-
   switch (fpi_ssm_get_cur_state (ssm))
     {
     case POLL_FINGER_DELAY:
@@ -1690,7 +1220,7 @@ poll_removal_result_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  if (self->deactivating || self->deactivation_in_progress || fpi_device_action_is_cancelled (dev))
+  if (fpi_device_action_is_cancelled (dev))
     {
       fpi_ssm_mark_failed (transfer->ssm,
                            g_error_new_literal (G_IO_ERROR,
@@ -1740,8 +1270,7 @@ poll_removal_result_cb (FpiUsbTransfer *transfer,
         }
 
       fp_dbg ("Finger removed, reporting status");
-      if (!self->deactivating && !self->deactivation_in_progress)
-        fpi_ssm_mark_completed (transfer->ssm);
+      fpi_ssm_mark_completed (transfer->ssm);
     }
 }
 
@@ -1751,11 +1280,6 @@ poll_removal_result_cb (FpiUsbTransfer *transfer,
 static void
 poll_removal_run_state (FpiSsm *ssm, FpDevice *dev)
 {
-  FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
-
-  if (self->deactivating || self->deactivation_in_progress)
-    return;
-
   switch (fpi_ssm_get_cur_state (ssm))
     {
     case POLL_REMOVAL_DELAY:
@@ -1781,10 +1305,6 @@ static void image_read_run_state (FpiSsm   *ssm,
  * CLAHE (Contrast Limited Adaptive Histogram Equalization).
  * Enhances local contrast per tile, so ridge/valley boundaries are sharpened
  * without the global flattening that a full-image equalization would cause.
- *
- * Applied on the RAW 80x64 image BEFORE upscale. This is the single most
- * important preprocessing step for NBIS minutiae detection on small sensors:
- * it makes ridges locally contrasty so MINDTCT can compute direction maps.
  *
  * Grid: tiles_x * tiles_y tiles of tile_w * tile_h pixels each.
  * clip_limit controls how much contrast amplification is allowed per tile
@@ -1978,40 +1498,6 @@ normalize_contrast (guint8 *data, gint width, gint height)
       else
         data[i] = (guint8) (((data[i] - lo) * 255.0) / range);
     }
-}
-
-/*
- * 3x3 Gaussian blur (sigma ~0.85) to smooth bilinear upscale artifacts.
- * Kernel: [1 2 1; 2 4 2; 1 2 1] / 16
- * Only applied to upscaled images - smooths blocky pixel grid into
- * more natural ridge contours for NBIS.
- */
-static void
-gaussian_blur_3x3 (guint8 *data, gint width, gint height)
-{
-  guint8 *tmp = g_malloc (width * height);
-
-  memcpy (tmp, data, width * height);
-
-  for (gint y = 1; y < height - 1; y++)
-    {
-      for (gint x = 1; x < width - 1; x++)
-        {
-          gint sum =
-            1 * tmp[(y - 1) * width + (x - 1)] +
-            2 * tmp[(y - 1) * width + x] +
-            1 * tmp[(y - 1) * width + (x + 1)] +
-            2 * tmp[y * width + (x - 1)] +
-            4 * tmp[y * width + x] +
-            2 * tmp[y * width + (x + 1)] +
-            1 * tmp[(y + 1) * width + (x - 1)] +
-            2 * tmp[(y + 1) * width + x] +
-            1 * tmp[(y + 1) * width + (x + 1)];
-          data[y * width + x] = (guint8) (sum / 16);
-        }
-    }
-
-  g_free (tmp);
 }
 
 static double
@@ -2213,7 +1699,7 @@ image_chunk_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  if (self->deactivating || self->deactivation_in_progress || fpi_device_action_is_cancelled (dev))
+  if (fpi_device_action_is_cancelled (dev))
     {
       fpi_ssm_mark_failed (transfer->ssm,
                            g_error_new_literal (G_IO_ERROR,
@@ -2317,8 +1803,7 @@ image_padding_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
-  if (self->deactivating || self->deactivation_in_progress || fpi_device_action_is_cancelled (dev))
+  if (fpi_device_action_is_cancelled (dev))
     {
       fpi_ssm_mark_failed (transfer->ssm,
                            g_error_new_literal (G_IO_ERROR,
@@ -2612,24 +2097,24 @@ unpack_and_match (FpPrint *print, const guint8 *captured, Cb2000NccTelemetry *te
   else
     tel->second_intensity = 0.0;
 
-  g_message ("[ NCC ] top1=%.4f top2=%.4f mean3=%.4f grad1=%.4f support=%u/%u "
-             "mask_thresh=%u min_samples=%u max_shift=%d support_min=%u "
-             "support_int=%.3f(%.3f) support_grad=%.3f(%.3f) adapt=%.3f",
-             tel->best_intensity,
-             tel->second_intensity,
-             tel->mean_top3_intensity,
-             tel->grad_for_best_intensity,
-             tel->support_count,
-             tel->compared_images,
-             mask_threshold,
-             min_samples,
-             max_shift,
-             support_min,
-             support_int,
-             support_int_effective,
-             support_grad,
-             support_grad_effective,
-             tel->adaptive_relax);
+  fp_dbg ("[ NCC ] top1=%.4f top2=%.4f mean3=%.4f grad1=%.4f support=%u/%u "
+          "mask_thresh=%u min_samples=%u max_shift=%d support_min=%u "
+          "support_int=%.3f(%.3f) support_grad=%.3f(%.3f) adapt=%.3f",
+          tel->best_intensity,
+          tel->second_intensity,
+          tel->mean_top3_intensity,
+          tel->grad_for_best_intensity,
+          tel->support_count,
+          tel->compared_images,
+          mask_threshold,
+          min_samples,
+          max_shift,
+          support_min,
+          support_int,
+          support_int_effective,
+          support_grad,
+          support_grad_effective,
+          tel->adaptive_relax);
 
   return TRUE;
 }
@@ -2640,35 +2125,12 @@ unpack_and_match (FpPrint *print, const guint8 *captured, Cb2000NccTelemetry *te
  *
  * Complete capture cycle matching Windows 1:1:
  *   HARD_RESET -> INIT_CONFIG -> SETTLE_DELAY -> WAIT_FINGER ->
- *   CAPTURE_START -> READ_IMAGE -> FINALIZE -> VERIFY_RESULT_STATUS ->
- *   VERIFY_READY_QUERY -> VERIFY_READY_DECIDE -> SUBMIT_IMAGE ->
+ *   CAPTURE_START -> READ_IMAGE -> FINALIZE -> SUBMIT_IMAGE ->
  *   WAIT_REMOVAL -> REARM -> [cycle_complete -> start_new_cycle]
  */
 
 static void cycle_run_state (FpiSsm   *ssm,
                              FpDevice *dev);
-
-/* Disabled: early placement delay (kept for reference, Windows parity). */
-#if 0
-static gboolean
-early_placement_delay_cb (gpointer user_data)
-{
-  FpiSsm *ssm = user_data;
-  FpDevice *dev = fpi_ssm_get_device (ssm);
-  FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
-
-  self->early_placement_detected = FALSE;
-
-  if (self->deactivating)
-    {
-      fpi_ssm_mark_completed (ssm);
-      return G_SOURCE_REMOVE;
-    }
-
-  fpi_ssm_jump_to_state (ssm, CYCLE_WAIT_FINGER);
-  return G_SOURCE_REMOVE;
-}
-#endif
 
 /*
  * Master cycle state machine. This is the authoritative control flow for
@@ -2724,8 +2186,8 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
 {
   FpiDeviceCanvasbio *self = FPI_DEVICE_CANVASBIO (dev);
 
-  /* Check deactivation and cancellation at every state entry */
-  if (self->deactivating || self->deactivation_in_progress || fpi_device_action_is_cancelled (dev))
+  /* Check cancellation at every state entry */
+  if (fpi_device_action_is_cancelled (dev))
     {
       fpi_ssm_mark_failed (ssm, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_CANCELLED, "Operation cancelled"));
       return;
@@ -2733,18 +2195,9 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
 
   switch (fpi_ssm_get_cur_state (ssm))
     {
-
-    case CYCLE_RECOVERY:
-      if (self->force_recovery)
-        fp_warn ("Cycle: RECOVERY (hard reset + re-init)");
-      else
-        fp_dbg ("Cycle: RECOVERY (no-op)");
-      fpi_ssm_next_state (ssm);
-      break;
-
     case CYCLE_HARD_RESET:
       {
-        if (self->initial_activation_done && !self->force_recovery)
+        if (self->initial_activation_done)
           {
             fp_dbg ("Cycle: HARD_RESET skipped (rearm mode)");
             fpi_ssm_jump_to_state (ssm, CYCLE_WAIT_FINGER);
@@ -2770,8 +2223,6 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
     case CYCLE_SETTLE_DELAY:
       if (!self->initial_activation_done)
         self->initial_activation_done = TRUE;
-      if (self->force_recovery)
-        self->force_recovery = FALSE;
       fp_dbg ("Cycle: SETTLE_DELAY (%dms)", CB2000_WAKEUP_DELAY);
       fpi_ssm_next_state_delayed (ssm, CB2000_WAKEUP_DELAY);
       break;
@@ -2783,7 +2234,6 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
       self->poll_stable_hits = 0;
       self->no_finger_streak = 0;
       self->poll_total_count = 0;
-      self->early_placement_detected = FALSE;
       self->poll_start_us = g_get_monotonic_time ();
       {
         FpiSsm *subsm = fpi_ssm_new (dev, poll_finger_run_state,
@@ -2792,24 +2242,13 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
       }
       break;
 
-    case CYCLE_EARLY_PLACEMENT_DELAY:
-      /* Disabled for Windows parity (no early-placement delay). */
-      fpi_ssm_next_state (ssm);
-      break;
-
     case CYCLE_CAPTURE_START:
       {
         FpiDeviceAction action = fpi_device_get_current_action (dev);
-        const char *seq_name = cb2000_capture_start_seq_name_for_action (action);
-        const Cb2000Command *seq_cmds = cb2000_capture_start_cmds_for_action (action);
-        const char *phase_name = cb2000_is_verify_phase_action (action) ?
-                                 "verify_like" :
-                                 "capture_enroll";
 
-
-        fp_info ("[ SSM_ROUTE ] action=%s phase=%s state=CAPTURE_START seq=%s",
-                 cb2000_action_label (action), phase_name, seq_name);
-        run_command_sequence (ssm, dev, seq_name, seq_cmds);
+        fp_info ("[ SSM_ROUTE ] action=%s state=CAPTURE_START",
+                 cb2000_action_label (action));
+        run_command_sequence (ssm, dev, "capture_start", capture_start_cmds);
         break;
       }
 
@@ -2828,15 +2267,10 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
     case CYCLE_FINALIZE:
       {
         FpiDeviceAction action = fpi_device_get_current_action (dev);
-        const char *seq_name = cb2000_capture_finalize_seq_name_for_action (action);
-        const Cb2000Command *seq_cmds = cb2000_capture_finalize_cmds_for_action (action);
-        const char *phase_name = cb2000_is_verify_phase_action (action) ?
-                                 "verify_like" :
-                                 "capture_enroll";
 
-        fp_info ("[ SSM_ROUTE ] action=%s phase=%s state=FINALIZE seq=%s",
-                 cb2000_action_label (action), phase_name, seq_name);
-        run_command_sequence (ssm, dev, seq_name, seq_cmds);
+        fp_info ("[ SSM_ROUTE ] action=%s state=FINALIZE",
+                 cb2000_action_label (action));
+        run_command_sequence (ssm, dev, "capture_finalize", capture_finalize_cmds);
         break;
       }
 
@@ -2844,8 +2278,6 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
       fp_dbg ("Cycle: SUBMIT_IMAGE (got %zu/%d bytes)",
               self->image_offset, CB2000_IMG_SIZE);
 
-
-      /* Create and submit image to libfprint for MoH processing. */
       {
         FpImage *img = fp_image_new (CB2000_IMG_WIDTH, CB2000_IMG_HEIGHT);
         img->ppmm = cb2000_get_ppmm ();
@@ -2867,27 +2299,13 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
           img->data, CB2000_IMG_WIDTH, CB2000_IMG_HEIGHT);
         fp_info ("Image variance: %.1f low_var_ratio=%.2f focus=%.1f",
                  variance, low_var_ratio, focus_var);
-        fp_info ("Detect reg51=%s, Capture reg51=%s",
-                 CB2000_USE_ALT_DETECT_51 ? "0x68" : "0xA8",
-                 "0x88");
 
         FpiDeviceAction action = fpi_device_get_current_action (dev);
-        gboolean use_bg_subtract = cb2000_should_apply_bg_subtraction (action);
-
-        if (cb2000_is_verify_phase_action (action))
-          {
-            /* stripped log */
-          }
-        else
-          {
-            fp_dbg ("[ SSM_ROUTE ] action=%s phase=capture_enroll state=SUBMIT_IMAGE route=HOST_PREPROCESS",
-                    cb2000_action_label (action));
-          }
 
         /*
          * Background bootstrap is useful for capture/enroll only.
-         * In verify/identify, Windows parity relies on finalize ACK routing,
-         * so a low-variance frame should not be re-labeled as background.
+         * In verify/identify, a low-variance frame should not be re-labeled
+         * as background.
          */
         if (!cb2000_is_verify_phase_action (action) &&
             !self->background_valid &&
@@ -2898,14 +2316,12 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
             fp_info ("Background captured (variance %.1f) - retrying capture",
                      variance);
             g_object_unref (img);
-            cb2000_retry_scan_with_cause (dev,
-                                          CB2000_RETRY_BACKGROUND_CAPTURE,
-                                          "(capture background)");
+            cb2000_retry_scan_with_cause (dev, CB2000_RETRY_BACKGROUND_CAPTURE);
             fpi_ssm_next_state (ssm);
             return;
           }
 
-        if (self->background_valid && use_bg_subtract)
+        if (self->background_valid)
           {
             apply_background_subtraction (img->data,
                                           self->background_buffer,
@@ -2913,15 +2329,12 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
                                           CB2000_IMG_HEIGHT);
           }
 
-        /* CLAHE: local contrast enhancement on raw image before upscale.
-         * This is the key preprocessing for NBIS on small sensors. */
+        /* CLAHE: local contrast enhancement on raw image. */
         apply_clahe (img->data, CB2000_IMG_WIDTH, CB2000_IMG_HEIGHT,
                      CB2000_CLAHE_TILE_W, CB2000_CLAHE_TILE_H,
                      CB2000_CLAHE_CLIP_LIMIT);
 
         normalize_contrast (img->data, CB2000_IMG_WIDTH, CB2000_IMG_HEIGHT);
-        /* Polarity: keep raw sensor orientation (white ridges on black). */
-        /* invert_image_u8(img->data, CB2000_IMG_SIZE); */
 
         double variance_norm = calculate_variance (img->data,
                                                    CB2000_IMG_WIDTH,
@@ -2971,38 +2384,16 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
                 self->previous_norm_valid = TRUE;
               }
             g_object_unref (img);
-            /* Avoid misleading "finger not centered" when failure is just quality/coverage. */
             cb2000_retry_scan_with_cause (dev,
                                           fail_area ?
                                           CB2000_RETRY_AREA_GATE :
-                                          CB2000_RETRY_QUALITY_GATE,
-                                          "(quality gate)");
+                                          CB2000_RETRY_QUALITY_GATE);
             fpi_ssm_next_state (ssm);
             return;
           }
 
         /* Let libfprint invert for matching (see fp-image.c). */
         img->flags = FPI_IMAGE_COLORS_INVERTED;
-
-        /* Optional upscale to improve NBIS minutiae extraction on small images. */
-        int upscale = cb2000_get_upscale_factor (action);
-        fp_dbg ("Preprocess profile: action=%s bg_subtract=%d upscale=%dx",
-                cb2000_action_label (action), use_bg_subtract, upscale);
-        if (upscale > 1)
-          {
-            FpImage *resized = fpi_image_resize (img, upscale, upscale);
-            if (resized)
-              {
-                resized->flags = img->flags;
-                resized->ppmm = img->ppmm * upscale;
-                /* Smooth bilinear upscale artifacts for NBIS ridge detection. */
-                gaussian_blur_3x3 (resized->data, resized->width,
-                                   resized->height);
-                g_object_unref (img);
-                img = resized;
-              }
-          }
-
 
         fp_info ("Captured fingerprint: %zu bytes (%dx%d)",
                  self->image_offset, img->width, img->height);
@@ -3013,173 +2404,146 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
             self->previous_norm_valid = TRUE;
           }
 
-        gboolean precheck_enabled = cb2000_should_precheck_minutiae (action);
-        fp_dbg ("Precheck profile: action=%s precheck=%d",
-                cb2000_action_label (action), precheck_enabled);
-
-        if (precheck_enabled)
+        /* Action-specific handling (FpDevice + NCC) */
+        if (action == FPI_DEVICE_ACTION_CAPTURE)
           {
-            Cb2000MinutiaePrecheckCtx *ctx = g_new0 (Cb2000MinutiaePrecheckCtx, 1);
-            ctx->dev = dev;
-            ctx->ssm = ssm;
-            ctx->img = img;
-            ctx->action = action;
-            fp_image_detect_minutiae (img, NULL, cb2000_minutiae_precheck_cb, ctx);
+            fpi_device_capture_complete (dev, img, NULL);
+            fpi_ssm_mark_completed (ssm);
             return;
           }
+        else if (action == FPI_DEVICE_ACTION_ENROLL)
+          {
+            guint8 *norm = g_malloc (CB2000_IMG_SIZE);
+            memcpy (norm, img->data, CB2000_IMG_SIZE);
+            g_object_unref (img);
 
-        cb2000_update_submit_telemetry (self, dev, action);
-        /* Action-specific handling (V33 FpDevice + NCC) */
-        {
-          if (action == FPI_DEVICE_ACTION_CAPTURE)
-            {
-              fpi_device_capture_complete (dev, img, NULL);
-              fpi_ssm_mark_completed (ssm);
-              return;
+            if (self->enroll_stage > 0 &&
+                cb2000_ncc_env_uint ("CB2000_NCC_ENROLL_GATE",
+                                     CB2000_NCC_ENROLL_GATE_ENABLED_DEFAULT, 0, 1))
+              {
+                gdouble g_best_int = 0.0, g_best_grad = 0.0, g_min_int = 0.0;
+                gboolean g_ok = cb2000_ncc_enroll_stage_check (
+                  norm,
+                  (const guint8 * const *) self->enroll_images,
+                  self->enroll_stage,
+                  (guint8) cb2000_ncc_env_uint ("CB2000_NCC_MASK_THRESH",
+                                                CB2000_NCC_MASK_THRESHOLD_DEFAULT,
+                                                1, 254),
+                  cb2000_ncc_env_uint ("CB2000_NCC_MIN_SAMPLES",
+                                       CB2000_NCC_MIN_SAMPLES_DEFAULT,
+                                       64, CB2000_IMG_SIZE),
+                  (gint) cb2000_ncc_env_uint ("CB2000_NCC_MAX_SHIFT",
+                                              CB2000_NCC_MAX_SHIFT_DEFAULT,
+                                              0, 16),
+                  &g_best_int, &g_best_grad, &g_min_int);
 
-            }
-          else if (action == FPI_DEVICE_ACTION_ENROLL)
-            {
-              guint8 *norm = g_malloc (CB2000_IMG_SIZE);
-              memcpy (norm, img->data, CB2000_IMG_SIZE);
-              normalize_contrast (norm, CB2000_IMG_WIDTH, CB2000_IMG_HEIGHT);
-              g_object_unref (img);
+                fp_dbg ("[ NCC ] enroll gate stage=%d best_int=%.4f best_grad=%.4f min_int=%.4f rejects=%u -> %s",
+                        self->enroll_stage, g_best_int, g_best_grad, g_min_int,
+                        self->enroll_gate_rejects, g_ok ? "ACCEPT" : "REJECT");
 
-              if (self->enroll_stage > 0 &&
-                  cb2000_ncc_env_uint ("CB2000_NCC_ENROLL_GATE",
-                                       CB2000_NCC_ENROLL_GATE_ENABLED_DEFAULT, 0, 1))
-                {
-                  gdouble g_best_int = 0.0, g_best_grad = 0.0, g_min_int = 0.0;
-                  gboolean g_ok = cb2000_ncc_enroll_stage_check (
-                    norm,
-                    (const guint8 * const *) self->enroll_images,
-                    self->enroll_stage,
-                    (guint8) cb2000_ncc_env_uint ("CB2000_NCC_MASK_THRESH",
-                                                  CB2000_NCC_MASK_THRESHOLD_DEFAULT,
-                                                  1, 254),
-                    cb2000_ncc_env_uint ("CB2000_NCC_MIN_SAMPLES",
-                                         CB2000_NCC_MIN_SAMPLES_DEFAULT,
-                                         64, CB2000_IMG_SIZE),
-                    (gint) cb2000_ncc_env_uint ("CB2000_NCC_MAX_SHIFT",
-                                                CB2000_NCC_MAX_SHIFT_DEFAULT,
-                                                0, 16),
-                    &g_best_int, &g_best_grad, &g_min_int);
+                if (!g_ok)
+                  {
+                    self->enroll_gate_rejects++;
 
-                  g_message ("[ NCC ] enroll gate stage=%d best_int=%.4f best_grad=%.4f min_int=%.4f rejects=%u -> %s",
-                             self->enroll_stage, g_best_int, g_best_grad, g_min_int,
-                             self->enroll_gate_rejects, g_ok ? "ACCEPT" : "REJECT");
+                    if (self->enroll_stage == 1 && self->enroll_gate_rejects >= 3)
+                      {
+                        /* The anchor (stage 0) is likely a poor/partial touch:
+                         * replace it with the latest sample and keep going. */
+                        fp_info ("[ NCC ] enroll gate: replacing anchor stage 0");
+                        g_clear_pointer (&self->enroll_images[0], g_free);
+                        self->enroll_images[0] = norm;
+                        self->enroll_gate_rejects = 0;
+                        cb2000_retry_scan_with_cause (dev, CB2000_RETRY_ENROLL_CONSISTENCY);
+                        fpi_ssm_next_state (ssm);
+                        return;
+                      }
 
-                  if (!g_ok)
-                    {
-                      self->enroll_gate_rejects++;
+                    if (self->enroll_gate_rejects < CB2000_NCC_ENROLL_GATE_MAX_REJECTS)
+                      {
+                        g_free (norm);
+                        cb2000_retry_scan_with_cause (dev, CB2000_RETRY_ENROLL_CONSISTENCY);
+                        fpi_ssm_next_state (ssm);
+                        return;
+                      }
 
-                      if (self->enroll_stage == 1 && self->enroll_gate_rejects >= 3)
-                        {
-                          /* The anchor (stage 0) is likely a poor/partial touch:
-                           * replace it with the latest sample and keep going. */
-                          fp_info ("[ NCC ] enroll gate: replacing anchor stage 0");
-                          g_clear_pointer (&self->enroll_images[0], g_free);
-                          self->enroll_images[0] = norm;
-                          self->enroll_gate_rejects = 0;
-                          cb2000_retry_scan_with_cause (dev,
-                                                        CB2000_RETRY_ENROLL_CONSISTENCY,
-                                                        "(anchor replaced)");
-                          fpi_ssm_next_state (ssm);
-                          return;
-                        }
+                    fp_warn ("[ NCC ] enroll gate: accepting stage %d after %u rejects",
+                             self->enroll_stage, self->enroll_gate_rejects);
+                  }
+              }
 
-                      if (self->enroll_gate_rejects < CB2000_NCC_ENROLL_GATE_MAX_REJECTS)
-                        {
-                          g_free (norm);
-                          cb2000_retry_scan_with_cause (dev,
-                                                        CB2000_RETRY_ENROLL_CONSISTENCY,
-                                                        "(no overlap with gallery)");
-                          fpi_ssm_next_state (ssm);
-                          return;
-                        }
+            self->enroll_gate_rejects = 0;
+            g_clear_pointer (&self->enroll_images[self->enroll_stage], g_free);
+            self->enroll_images[self->enroll_stage] = norm;
+            self->enroll_stage++;
 
-                      fp_warn ("[ NCC ] enroll gate: accepting stage %d after %u rejects",
-                               self->enroll_stage, self->enroll_gate_rejects);
-                    }
-                }
+            fp_info ("Enrollment stage %d/%d complete",
+                     self->enroll_stage, CB2000_NR_ENROLL_STAGES);
 
-              self->enroll_gate_rejects = 0;
-              g_clear_pointer (&self->enroll_images[self->enroll_stage], g_free);
-              self->enroll_images[self->enroll_stage] = norm;
-              self->enroll_stage++;
+            if (self->enroll_stage >= CB2000_NR_ENROLL_STAGES)
+              {
+                fpi_ssm_mark_completed (ssm);
+              }
+            else
+              {
+                fpi_device_enroll_progress (dev, self->enroll_stage, NULL, NULL);
+                fpi_ssm_next_state (ssm);      /* -> WAIT_REMOVAL -> REARM -> new cycle */
+              }
+            return;
+          }
+        else if (action == FPI_DEVICE_ACTION_VERIFY ||
+                 action == FPI_DEVICE_ACTION_IDENTIFY)
+          {
+            FpPrint *enrolled = NULL;
+            guint8 norm[CB2000_IMG_SIZE];
+            Cb2000NccTelemetry ncc_tel;
+            Cb2000NccDecision ncc_decision = CB2000_NCC_DECISION_ERROR;
 
-              fp_info ("Enrollment stage %d/%d complete",
-                       self->enroll_stage, CB2000_NR_ENROLL_STAGES);
+            memcpy (norm, img->data, CB2000_IMG_SIZE);
+            g_object_unref (img);
 
-              if (self->enroll_stage >= CB2000_NR_ENROLL_STAGES)
-                {
-                  fpi_ssm_mark_completed (ssm);
-                }
-              else
-                {
-                  fpi_device_enroll_progress (dev, self->enroll_stage, NULL, NULL);
-                  fpi_ssm_next_state (ssm);      /* -> WAIT_REMOVAL -> REARM -> new cycle */
-                }
-              return;
+            fpi_device_get_verify_data (dev, &enrolled);
+            if (enrolled && unpack_and_match (enrolled, norm, &ncc_tel))
+              {
+                ncc_decision = cb2000_ncc_classify (&ncc_tel);
+                switch (ncc_decision)
+                  {
+                  case CB2000_NCC_DECISION_MATCH:
+                    self->verify_result = FPI_MATCH_SUCCESS;
+                    break;
 
-            }
-          else if (action == FPI_DEVICE_ACTION_VERIFY ||
-                   action == FPI_DEVICE_ACTION_IDENTIFY)
-            {
-              FpPrint *enrolled = NULL;
-              guint8 norm[CB2000_IMG_SIZE];
-              Cb2000NccTelemetry ncc_tel;
-              Cb2000NccDecision ncc_decision = CB2000_NCC_DECISION_ERROR;
+                  case CB2000_NCC_DECISION_NO_MATCH:
+                    self->verify_result = FPI_MATCH_FAIL;
+                    break;
 
-              memcpy (norm, img->data, CB2000_IMG_SIZE);
-              normalize_contrast (norm, CB2000_IMG_WIDTH, CB2000_IMG_HEIGHT);
-              g_object_unref (img);
+                  case CB2000_NCC_DECISION_RETRY:
+                    self->verify_result = FPI_MATCH_ERROR;
+                    break;
 
-              fpi_device_get_verify_data (dev, &enrolled);
-              if (enrolled && unpack_and_match (enrolled, norm, &ncc_tel))
-                {
-                  ncc_decision = cb2000_ncc_classify (&ncc_tel);
-                  switch (ncc_decision)
-                    {
-                    case CB2000_NCC_DECISION_MATCH:
-                      self->verify_result = FPI_MATCH_SUCCESS;
-                      break;
+                  case CB2000_NCC_DECISION_ERROR:
+                  default:
+                    self->verify_result = FPI_MATCH_ERROR;
+                    break;
+                  }
+              }
+            else
+              {
+                self->verify_result = FPI_MATCH_ERROR;
+              }
 
-                    case CB2000_NCC_DECISION_NO_MATCH:
-                      self->verify_result = FPI_MATCH_FAIL;
-                      break;
+            fp_info ("[ NCC ] decision=%s -> result=%s",
+                     cb2000_ncc_decision_label (ncc_decision),
+                     self->verify_result == FPI_MATCH_SUCCESS ? "MATCH" :
+                     self->verify_result == FPI_MATCH_FAIL ? "NO MATCH" : "ERROR");
 
-                    case CB2000_NCC_DECISION_RETRY:
-                      self->verify_result = FPI_MATCH_ERROR;
-                      break;
-
-                    case CB2000_NCC_DECISION_ERROR:
-                    default:
-                      self->verify_result = FPI_MATCH_ERROR;
-                      break;
-                    }
-                }
-              else
-                {
-                  self->verify_result = FPI_MATCH_ERROR;
-                }
-
-              g_message ("[ NCC ] decision=%s -> result=%s",
-                         cb2000_ncc_decision_label (ncc_decision),
-                         self->verify_result == FPI_MATCH_SUCCESS ? "MATCH" :
-                         self->verify_result == FPI_MATCH_FAIL ? "NO MATCH" : "ERROR");
-
-              fpi_ssm_mark_completed (ssm);
-              return;
-
-            }
-          else
-            {
-              g_object_unref (img);
-              fpi_ssm_next_state (ssm);
-              return;
-            }
-        }
+            fpi_ssm_mark_completed (ssm);
+            return;
+          }
+        else
+          {
+            g_object_unref (img);
+            fpi_ssm_next_state (ssm);
+            return;
+          }
       }
       break;
 
@@ -3203,8 +2567,8 @@ cycle_run_state (FpiSsm *ssm, FpDevice *dev)
 }
 
 /*
- * Cycle completion handler. Cancels any pending timers, handles recovery,
- * and starts the next cycle unless deactivation is in progress.
+ * Cycle completion handler. Handles errors/cancellation and starts the next
+ * cycle when additional scans are required.
  */
 static void
 cycle_complete (FpiSsm *ssm, FpDevice *dev, GError *error)
@@ -3213,14 +2577,11 @@ cycle_complete (FpiSsm *ssm, FpDevice *dev, GError *error)
 
   self->cycle_ssm = NULL;
 
-  /* Cancel settle timer if pending */
-
   FpiDeviceAction action = fpi_device_get_current_action (dev);
 
   /* Check for cancellation */
   if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ||
-      (action != FPI_DEVICE_ACTION_NONE && fpi_device_action_is_cancelled (dev)) ||
-      self->deactivating)
+      (action != FPI_DEVICE_ACTION_NONE && fpi_device_action_is_cancelled (dev)))
     {
       fp_info ("Cycle cancelled");
       if (action != FPI_DEVICE_ACTION_NONE)
@@ -3246,49 +2607,43 @@ cycle_complete (FpiSsm *ssm, FpDevice *dev, GError *error)
       return;
     }
 
-  /* stripped log */
   fp_dbg ("Cycle complete, checking action-specific completion");
 
-  {
-    /* Action-specific completion for FpDevice */
-    if (action == FPI_DEVICE_ACTION_ENROLL)
-      {
-        if (self->enroll_stage >= CB2000_NR_ENROLL_STAGES)
-          {
-            /* All stages done - pack and complete */
-            FpPrint *print = NULL;
-            fpi_device_get_enroll_data (dev, &print);
-            pack_enrollment_data (self, print);
-            fp_info ("Enrollment complete (%d stages)", CB2000_NR_ENROLL_STAGES);
-            fpi_device_enroll_complete (dev, g_object_ref (print), NULL);
-            return;
-          }
-        /* More stages: fall through to start_new_cycle */
-      }
-    else if (action == FPI_DEVICE_ACTION_VERIFY ||
-             action == FPI_DEVICE_ACTION_IDENTIFY)
-      {
-
-
-        if (self->verify_result == FPI_MATCH_ERROR)
-          {
-            GError *err = fpi_device_retry_new (FP_DEVICE_RETRY_GENERAL);
-            fpi_device_verify_report (dev, FPI_MATCH_ERROR, NULL, err);
-          }
-        else
-          {
-            fpi_device_verify_report (dev, self->verify_result, NULL, NULL);
-          }
-        fpi_device_verify_complete (dev, NULL);
-        return;
-      }
-    else if (action == FPI_DEVICE_ACTION_CAPTURE)
-      {
-
-        /* capture_complete already called in SUBMIT_IMAGE success path. */
-        return;
-      }
-  }
+  /* Action-specific completion for FpDevice */
+  if (action == FPI_DEVICE_ACTION_ENROLL)
+    {
+      if (self->enroll_stage >= CB2000_NR_ENROLL_STAGES)
+        {
+          /* All stages done - pack and complete */
+          FpPrint *print = NULL;
+          fpi_device_get_enroll_data (dev, &print);
+          pack_enrollment_data (self, print);
+          fp_info ("Enrollment complete (%d stages)", CB2000_NR_ENROLL_STAGES);
+          fpi_device_enroll_complete (dev, g_object_ref (print), NULL);
+          return;
+        }
+      /* More stages: fall through to start_new_cycle */
+    }
+  else if (action == FPI_DEVICE_ACTION_VERIFY ||
+           action == FPI_DEVICE_ACTION_IDENTIFY)
+    {
+      if (self->verify_result == FPI_MATCH_ERROR)
+        {
+          GError *err = fpi_device_retry_new (FP_DEVICE_RETRY_GENERAL);
+          fpi_device_verify_report (dev, FPI_MATCH_ERROR, NULL, err);
+        }
+      else
+        {
+          fpi_device_verify_report (dev, self->verify_result, NULL, NULL);
+        }
+      fpi_device_verify_complete (dev, NULL);
+      return;
+    }
+  else if (action == FPI_DEVICE_ACTION_CAPTURE)
+    {
+      /* capture_complete already called in SUBMIT_IMAGE success path. */
+      return;
+    }
 
   fp_dbg ("Starting next cycle");
   start_new_cycle (dev);
@@ -3309,9 +2664,9 @@ start_new_cycle (FpDevice *dev)
       return;
     }
 
-  if (self->deactivating || fpi_device_action_is_cancelled (dev))
+  if (fpi_device_action_is_cancelled (dev))
     {
-      fp_info ("start_new_cycle: action is cancelled/deactivating, completing");
+      fp_info ("start_new_cycle: action is cancelled, completing");
       fpi_device_action_error (dev,
                                g_error_new_literal (G_IO_ERROR,
                                                     G_IO_ERROR_CANCELLED,
@@ -3364,8 +2719,6 @@ dev_open (FpDevice *device)
   self->previous_norm_buffer = g_malloc0 (CB2000_IMG_SIZE);
   self->background_valid = FALSE;
   self->previous_norm_valid = FALSE;
-  self->deactivating = FALSE;
-  self->deactivation_in_progress = FALSE;
   self->image_offset = 0;
   self->chunks_read = 0;
   self->poll_stable_hits = 0;
@@ -3373,14 +2726,10 @@ dev_open (FpDevice *device)
   self->removal_poll_count = 0;
   self->removal_stable_off_hits = 0;
   self->poll_total_count = 0;
-  self->early_placement_detected = FALSE;
   self->poll_start_us = 0;
   self->removal_start_us = 0;
   self->cycle_ssm = NULL;
 
-
-
-  self->force_recovery = FALSE;
   fp_dbg ("Device opened successfully");
   fpi_device_open_complete (device, NULL);
 }
@@ -3420,7 +2769,7 @@ dev_close (FpDevice *device)
   g_clear_pointer (&self->background_buffer, g_free);
   g_clear_pointer (&self->previous_norm_buffer, g_free);
 
-  for (i = 0; i < 5; i++)
+  for (i = 0; i < CB2000_NR_ENROLL_STAGES; i++)
     g_clear_pointer (&self->enroll_images[i], g_free);
 
   /* Send vendor deactivation asynchronously before releasing interface. */
@@ -3441,10 +2790,7 @@ dev_close (FpDevice *device)
 static void
 dev_action_common_init (FpiDeviceCanvasbio *self)
 {
-  self->deactivating = FALSE;
-  self->deactivation_in_progress = FALSE;
   self->initial_activation_done = FALSE;
-  self->force_recovery = FALSE;
   self->previous_norm_valid = FALSE;
 }
 

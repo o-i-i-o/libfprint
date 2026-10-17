@@ -784,26 +784,26 @@ cb2000_ncc_classify (const Cb2000NccTelemetry *tel)
         }
     }
 
-  g_message ("[ NCC ] classify thresholds: strong(top1>=%.3f top2>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
-             "medium(top1>=%.3f top2>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
-             "dominant(top1>=%.3f top2>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
-             "consistent(top1>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
-             "clear_nomatch(support==0 && top1<%.3f && mean3<%.3f) "
-             "nomatch(top1<%.3f) "
-             "score_sum=%.4f "
-             "adaptive(relax=%.3f relax_support=%u cohesion_mean=%.3f cohesion_min=%.3f pairs=%u)",
-             match_top1, match_top2, match_mean3, match_grad1, match_score_sum, support_min,
-             medium_top1, medium_top2, medium_mean3, medium_grad1, medium_score_sum, medium_support_min,
-             dominant_top1, dominant_top2, dominant_mean3, dominant_grad1, dominant_score_sum, dominant_support_min,
-             consistent_top1, consistent_mean3, consistent_grad1, consistent_score_sum, consistent_support_min,
-             clear_nomatch_top1, clear_nomatch_mean3,
-             nomatch_top1,
-             score_sum,
-             relax,
-             adaptive_relax_support,
-             tel->enroll_pair_mean_intensity,
-             tel->enroll_pair_min_intensity,
-             tel->enroll_pair_count);
+  fp_dbg ("[ NCC ] classify thresholds: strong(top1>=%.3f top2>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
+          "medium(top1>=%.3f top2>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
+          "dominant(top1>=%.3f top2>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
+          "consistent(top1>=%.3f mean3>=%.3f grad1>=%.3f sum>=%.3f support>=%u) "
+          "clear_nomatch(support==0 && top1<%.3f && mean3<%.3f) "
+          "nomatch(top1<%.3f) "
+          "score_sum=%.4f "
+          "adaptive(relax=%.3f relax_support=%u cohesion_mean=%.3f cohesion_min=%.3f pairs=%u)",
+          match_top1, match_top2, match_mean3, match_grad1, match_score_sum, support_min,
+          medium_top1, medium_top2, medium_mean3, medium_grad1, medium_score_sum, medium_support_min,
+          dominant_top1, dominant_top2, dominant_mean3, dominant_grad1, dominant_score_sum, dominant_support_min,
+          consistent_top1, consistent_mean3, consistent_grad1, consistent_score_sum, consistent_support_min,
+          clear_nomatch_top1, clear_nomatch_mean3,
+          nomatch_top1,
+          score_sum,
+          relax,
+          adaptive_relax_support,
+          tel->enroll_pair_mean_intensity,
+          tel->enroll_pair_min_intensity,
+          tel->enroll_pair_count);
 
   if (tel->compared_images == 0)
     return CB2000_NCC_DECISION_ERROR;
