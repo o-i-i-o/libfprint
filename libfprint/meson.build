@@ -88,6 +88,7 @@ nbis_sources = [
 ]
 
 driver_sources = {
+    'syna_00dc': files('drivers/syna_00dc/syna_device.c','drivers/syna_00dc/syna_ssm.c','drivers/syna_00dc/syna_align_frames.c','drivers/syna_00dc/syna_template.c','drivers/syna_00dc/syna_mode2.c','drivers/syna_00dc/syna_matcher.c','drivers/syna_00dc/syna_tls.c','drivers/syna_00dc/syna_oem.c'),
     'upekts' : files(
         'drivers/upekts.c',
         'drivers/upek_proto.c',
