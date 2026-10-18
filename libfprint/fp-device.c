@@ -1037,7 +1037,7 @@ fp_device_suspend_finish (FpDevice     *device,
  * @user_data: the data to pass to @callback
  *
  * Resume device after system suspend. Retrieve the result with
- * fp_device_suspend_finish().
+ * fp_device_resume_finish().
  *
  * Note that it is not defined when any ongoing operation may return (success or
  * error). You must be ready to handle this before, during or after the
@@ -1838,7 +1838,7 @@ fp_device_clear_storage (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
