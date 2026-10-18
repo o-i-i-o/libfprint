@@ -3219,6 +3219,28 @@ test_driver_clear_storage_error (void)
   g_assert_false (ret);
 }
 
+static void
+test_driver_clear_storage_suspended (void)
+{
+  g_autoptr(GError) error = NULL;
+  g_autoptr(FpAutoCloseDevice) device = auto_close_fake_device_new ();
+  FpiDeviceFake *fake_dev = FPI_DEVICE_FAKE (device);
+  gboolean ret;
+
+  fp_device_suspend_sync (device, NULL, &error);
+  g_assert_no_error (error);
+
+  fake_dev->last_called_function = NULL;
+  ret = fp_device_clear_storage_sync (device, NULL, &error);
+  g_assert (fake_dev->last_called_function == NULL);
+  g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_BUSY);
+  g_assert_false (ret);
+  g_clear_error (&error);
+
+  fp_device_resume_sync (device, NULL, &error);
+  g_assert_no_error (error);
+}
+
 static gboolean
 fake_device_delete_wait_for_cancel_timeout (gpointer data)
 {
@@ -4168,6 +4190,7 @@ main (int argc, char *argv[])
   g_test_add_func ("/driver/delete/error", test_driver_delete_error);
   g_test_add_func ("/driver/clear_storage", test_driver_clear_storage);
   g_test_add_func ("/driver/clear_storage/error", test_driver_clear_storage_error);
+  g_test_add_func ("/driver/clear_storage/suspended", test_driver_clear_storage_suspended);
   g_test_add_func ("/driver/cancel", test_driver_cancel);
   g_test_add_func ("/driver/cancel/fail", test_driver_cancel_fail);
 

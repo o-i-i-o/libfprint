@@ -1838,7 +1838,7 @@ fp_device_clear_storage (FpDevice           *device,
       return;
     }
 
-  if (priv->current_task)
+  if (priv->current_task || priv->is_suspended)
     {
       g_task_return_error (task,
                            fpi_device_error_new (FP_DEVICE_ERROR_BUSY));
