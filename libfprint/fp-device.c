@@ -1037,7 +1037,7 @@ fp_device_suspend_finish (FpDevice     *device,
  * @user_data: the data to pass to @callback
  *
  * Resume device after system suspend. Retrieve the result with
- * fp_device_suspend_finish().
+ * fp_device_resume_finish().
  *
  * Note that it is not defined when any ongoing operation may return (success or
  * error). You must be ready to handle this before, during or after the
