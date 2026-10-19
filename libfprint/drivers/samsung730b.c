@@ -737,9 +737,12 @@ fail:
 /*
  * Detect if a finger is present on the sensor.
  *
- * This is a heuristic based on pixel value distribution: when a finger
- * is pressed, the sensor outputs significant 0xFF pixels (light ridges
- * due to inverted polarity). An empty sensor reads mostly dark/mid values.
+ * This is a heuristic based on pixel value distribution. An empty sensor
+ * reads almost entirely 0x00 (~97% on tested units). When a finger is
+ * pressed, some units output significant 0xFF pixels (light ridges due to
+ * inverted polarity), while others never saturate to 0xFF and only show
+ * mid-gray values. Detect either case: a high 0xFF ratio, or the 0x00
+ * ratio dropping well below the idle level.
  *
  * Returns TRUE if finger presence is detected.
  */
@@ -764,6 +767,12 @@ s730b_has_fingerprint (const guint8 *data, gsize len)
    * (highly saturated) frames.
    */
   if (ff_ratio > 0.20 && zeros < total * 0.95)
+    return TRUE;
+
+  /* Units whose ridges do not saturate to 0xFF: idle frames are ~97%
+   * zeros, a touch drops this to ~11%.
+   */
+  if (zeros < total * 0.60)
     return TRUE;
 
   return FALSE;
