@@ -84,6 +84,7 @@ struct _FpiDeviceCv2
   FpDevice parent;
 
   gchar   *fw_version;     /* USH_REL_UPGRADE_VER, NULL if unknown */
+  gboolean no_enroll_begin; /* the firmware rejects 0x8a as unknown */
 
   FpiSsm  *task_ssm;
   GError  *task_error;     /* held while cleanup runs */
@@ -590,7 +591,9 @@ close_session_cb (FpiDeviceCv2   *self,
  *
  * When enrolling, 0x8a (begin enrollment) comes right before every capture,
  * as the vendor's Windows driver sends it. It keeps the samples already
- * accepted.
+ * accepted. Older firmware (seen: 00045021 on a Latitude E7470) does not
+ * know 0x8a and answers 0x57 (CV_INVALID_COMMAND); captures in enroll mode
+ * then enroll without it, so it is skipped from then on.
  */
 
 enum {
@@ -625,6 +628,13 @@ capture_enroll_begin_cb (FpiDeviceCv2   *self,
                          const Cv2Reply *reply,
                          GError         *error)
 {
+  if (reply && reply->status == CV2_STATUS_INVALID_COMMAND)
+    {
+      fp_info ("Firmware does not know begin enrollment (0x8a); enrolling without it");
+      g_clear_error (&error);
+      self->no_enroll_begin = TRUE;
+    }
+
   if (error)
     {
       fpi_ssm_mark_failed (ssm, error);
@@ -730,6 +740,12 @@ capture_run_state (FpiSsm *ssm, FpDevice *dev)
     case CAPTURE_ENROLL_BEGIN:
       if (!self->op.enroll)
         {
+          fpi_ssm_next_state (ssm);
+          break;
+        }
+      if (self->no_enroll_begin)
+        {
+          self->op.enrolling = TRUE;
           fpi_ssm_next_state (ssm);
           break;
         }
