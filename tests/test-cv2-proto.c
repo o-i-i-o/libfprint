@@ -685,6 +685,9 @@ test_status_classify (void)
     { CV2_CMD_MATCH, 0x1b, CV2_OUTCOME_ERROR, fp_device_error_quark, FP_DEVICE_ERROR_DATA_NOT_FOUND },
     { CV2_CMD_ENROLL_SAMPLE, 0x89, CV2_OUTCOME_RETRY, fp_device_retry_quark, FP_DEVICE_RETRY_GENERAL },
     { CV2_CMD_MATCH, 0x89, CV2_OUTCOME_RETRY, fp_device_retry_quark, FP_DEVICE_RETRY_GENERAL },
+    /* Firmware 00045021 does not know begin enrollment; the driver tells
+     * this status apart from the error itself */
+    { CV2_CMD_ENROLL_BEGIN, 0x57, CV2_OUTCOME_ERROR, fp_device_error_quark, FP_DEVICE_ERROR_PROTO },
     { CV2_CMD_CLOSE_SESSION, 0x00, CV2_OUTCOME_OK, NULL, 0 },
   };
 
