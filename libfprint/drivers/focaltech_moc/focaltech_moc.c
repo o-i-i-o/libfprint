@@ -23,6 +23,7 @@
 #define FP_COMPONENT "focaltech_moc"
 
 #define FOCALTECH_QUIRK_SINGLE_SLOT 1
+#define FOCALTECH_QUIRK_SHORT_LIST 2
 #define FOCALTECH_MOC_STATIC_USER_ID "focaltech_moc_static_id"
 
 #include "drivers_api.h"
@@ -42,6 +43,7 @@ static const FpIdEntry id_table[] = {
   { .vid = 0x2808,  .pid = 0x077A,  },
   { .vid = 0x2808,  .pid = 0x079A,  },
   { .vid = 0x2808,  .pid = 0x5158,  },
+  { .vid = 0x2808,  .pid = 0xa553,  .driver_data = FOCALTECH_QUIRK_SHORT_LIST, },
   { .vid = 0x2808,  .pid = 0x6553,  .driver_data = FOCALTECH_QUIRK_SINGLE_SLOT, },
   { .vid = 0,  .pid = 0,  .driver_data = 0 },   /* terminating entry */
 };
@@ -1129,12 +1131,41 @@ focaltech_moc_get_enrolled_list_cb (FpiDeviceFocaltechMoc *self,
 
       if (fp_cmd->code == 0x04)
         {
-          if (!focaltech_moc_require_response_len (self, length_in,
-                                                   sizeof (FpCmd) +
-                                                   sizeof (struct UidList) +
-                                                   sizeof (uint8_t),
-                                                   "get enrolled list"))
-            return;
+          struct UidList short_list = { 0 };
+
+          if (fpi_device_get_driver_data (FP_DEVICE (self)) == FOCALTECH_QUIRK_SHORT_LIST)
+            {
+              /* These sensors reply with a count byte followed by count
+               * 32-byte records instead of the fixed-size UidList. The
+               * records are not the print UIDs returned by enroll/match,
+               * which is why listing is disabled for them in probe. */
+              const uint8_t *p = (const uint8_t *) (fp_cmd + 1);
+              uint16_t data_len = get_u16_from_u8_lh (fp_cmd->header.len.l,
+                                                      fp_cmd->header.len.h) - 1;
+              size_t nprints = 0;
+
+              if (data_len >= 1)
+                nprints = MIN ((size_t) p[0], (data_len - 1) / sizeof (struct UserId));
+              nprints = MIN (nprints, FOCALTECH_MOC_MAX_FINGERS);
+
+              for (size_t i = 0; i < nprints; i++)
+                {
+                  short_list.actived[i] = 1;
+                  memcpy (short_list.uid[i].uid,
+                          p + 1 + i * sizeof (struct UserId),
+                          sizeof (struct UserId));
+                }
+              uid_list = &short_list;
+            }
+          else if (!focaltech_moc_require_response_len (self, length_in,
+                                                        sizeof (FpCmd) +
+                                                        sizeof (struct UidList) +
+                                                        sizeof (uint8_t),
+                                                        "get enrolled list"))
+            {
+              return;
+            }
+
           for (size_t i = 0; i < FOCALTECH_MOC_MAX_FINGERS; i++)
             {
               if (uid_list->actived[i] != 0)
@@ -1991,6 +2022,13 @@ focaltech_moc_probe (FpDevice *device)
 
   if (quirk == FOCALTECH_QUIRK_SINGLE_SLOT)
     fpi_device_update_features (device, FP_DEVICE_FEATURE_STORAGE_DELETE, 0);
+
+  /* The enrolled-list reply of these sensors carries no print UIDs, so
+   * stored prints can't be listed or deleted individually. */
+  if (quirk == FOCALTECH_QUIRK_SHORT_LIST)
+    fpi_device_update_features (device,
+                                FP_DEVICE_FEATURE_STORAGE_LIST |
+                                FP_DEVICE_FEATURE_STORAGE_DELETE, 0);
 
   fpi_device_probe_complete (device, NULL, NULL, NULL);
 }

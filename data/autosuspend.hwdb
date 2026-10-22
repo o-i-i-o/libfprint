@@ -198,6 +198,7 @@ usb:v2808p1579*
 usb:v2808p077A*
 usb:v2808p079A*
 usb:v2808p5158*
+usb:v2808pA553*
 usb:v2808p6553*
  ID_AUTOSUSPEND=1
  ID_PERSIST=0
@@ -549,7 +550,6 @@ usb:v2808p6652*
 usb:v2808p9338*
 usb:v2808p9348*
 usb:v2808p93A9*
-usb:v2808pA553*
 usb:v2808pA573*
 usb:v2808pA658*
 usb:v2808pC652*
