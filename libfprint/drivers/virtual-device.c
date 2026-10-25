@@ -31,6 +31,7 @@
 
 #include "virtual-device-private.h"
 #include "fpi-log.h"
+#include "fpi-env.h"
 
 G_DEFINE_TYPE (FpDeviceVirtualDevice, fpi_device_virtual_device, FP_TYPE_DEVICE)
 
@@ -771,7 +772,7 @@ fpi_device_virtual_device_class_init (FpDeviceVirtualDeviceClass *klass)
 {
   FpDeviceClass *dev_class = FP_DEVICE_CLASS (klass);
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  const char *hot_seconds;
+  gint64 hot_seconds_value;
 
   object_class->finalize = fpi_device_virtual_device_finalize;
 
@@ -787,15 +788,14 @@ fpi_device_virtual_device_class_init (FpDeviceVirtualDeviceClass *klass)
   dev_class->enroll = dev_enroll;
   dev_class->cancel = dev_cancel;
 
-  if ((hot_seconds = g_getenv ("FP_VIRTUAL_DEVICE_HOT_SECONDS")) &&
-      *hot_seconds != '\0')
+  hot_seconds_value = fpi_env_get_int64 ("FP_VIRTUAL_DEVICE_HOT_SECONDS",
+                                         G_MININT64, G_MAXINT64,
+                                         dev_class->temp_hot_seconds);
+  if (hot_seconds_value >= G_MAXINT32 || hot_seconds_value < 0)
+    hot_seconds_value = -1;
+
+  if (hot_seconds_value != dev_class->temp_hot_seconds)
     {
-      gint64 hot_seconds_value;
-
-      hot_seconds_value = g_ascii_strtoll (hot_seconds, NULL, 10);
-      if (hot_seconds_value >= G_MAXINT32 || hot_seconds_value < 0)
-        hot_seconds_value = -1;
-
       dev_class->temp_hot_seconds = hot_seconds_value;
       g_debug ("device hot seconds set to %d", dev_class->temp_hot_seconds);
     }

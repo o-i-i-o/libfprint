@@ -359,6 +359,12 @@ BUG
 </SECTION>
 
 <SECTION>
+<FILE>fpi-env</FILE>
+fpi_env_get_int64
+fpi_env_get_double
+</SECTION>
+
+<SECTION>
 <FILE>fpi-print</FILE>
 FpiPrintType
 FpiMatchResult
