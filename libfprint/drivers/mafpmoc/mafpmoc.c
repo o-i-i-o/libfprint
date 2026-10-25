@@ -2521,14 +2521,12 @@ static void
 fpi_device_mafpmoc_class_init (FpiDeviceMafpmocClass *klass)
 {
   FpDeviceClass *dev_class = FP_DEVICE_CLASS (klass);
-  const char *env_enroll_samples;
 
   dev_class->id = "mafpmoc";
   dev_class->full_name = "MAFP MOC Fingerprint Sensor";
   dev_class->type = FP_DEVICE_TYPE_USB;
   dev_class->scan_type = FP_SCAN_TYPE_PRESS;
   dev_class->id_table = id_table;
-  dev_class->nr_enroll_stages = DEFAULT_ENROLL_SAMPLES;
   dev_class->temp_hot_seconds = -1;
 
   dev_class->open   = mafp_init;
@@ -2540,14 +2538,8 @@ fpi_device_mafpmoc_class_init (FpiDeviceMafpmocClass *klass)
   dev_class->clear_storage = mafp_template_delete_all;
   dev_class->list = mafp_template_list;
 
-  env_enroll_samples = getenv (MAFP_ENV_ENROLL_SAMPLES);
-  if (env_enroll_samples)
-    {
-      guint64 max_enroll_stage = g_ascii_strtoll (env_enroll_samples, NULL, 10);
-
-      if (max_enroll_stage > 0 && max_enroll_stage <= 30)
-        dev_class->nr_enroll_stages = max_enroll_stage;
-    }
+  dev_class->nr_enroll_stages = fpi_env_get_int64 (MAFP_ENV_ENROLL_SAMPLES, 1, 30,
+                                                   DEFAULT_ENROLL_SAMPLES);
 
   fpi_device_class_auto_initialize_features (dev_class);
 }
