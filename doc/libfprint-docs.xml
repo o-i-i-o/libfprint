@@ -46,6 +46,7 @@
       <xi:include href="xml/fpi-usb-transfer.xml"/>
       <xi:include href="xml/fpi-ssm.xml"/>
       <xi:include href="xml/fpi-log.xml"/>
+      <xi:include href="xml/fpi-env.xml"/>
     </chapter>
 
     <chapter id="driver-data">

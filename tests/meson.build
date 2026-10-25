@@ -311,6 +311,7 @@ test_utils = static_library('fprint-test-utils',
 
 unit_tests = [
     'fpi-device',
+    'fpi-env',
     'fpi-ssm',
     'fpi-assembling',
 ]

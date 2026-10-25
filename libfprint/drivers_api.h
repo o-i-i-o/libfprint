@@ -25,6 +25,7 @@
 #include "fpi-enums.h"
 #include "fpi-assembling.h"
 #include "fpi-device.h"
+#include "fpi-env.h"
 #include "fpi-image-device.h"
 #include "fpi-image.h"
 #include "fpi-log.h"
