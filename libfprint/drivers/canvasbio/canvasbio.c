@@ -1,6 +1,7 @@
 /*
  * CanvasBio CB2000 Fingerprint Reader Driver for libfprint
  *
+ * Copyright (C) 2025-2026 Kristofer Pagnussat
  * Copyright (C) 2026 Roberto Focosi <rfocosi@gmail.com>
  * Based on protocol analysis from libfprint issue #509
  * https://gitlab.freedesktop.org/libfprint/libfprint/-/issues/509

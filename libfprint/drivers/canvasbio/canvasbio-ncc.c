@@ -1,6 +1,7 @@
 /*
  * CanvasBio CB2000 Driver - NCC Matching Engine Implementation
  *
+ * Copyright (C) 2025-2026 Kristofer Pagnussat
  * Copyright (C) 2026 Roberto Focosi <rfocosi@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
