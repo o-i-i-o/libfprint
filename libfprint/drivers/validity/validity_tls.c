@@ -1313,21 +1313,47 @@ validity_tls_parse_server_hello (ValidityTlsState *tls,
   return TRUE;
 }
 
-/* Helper: get public key point bytes from EVP_PKEY as uncompressed */
+/* Helper: get public key point bytes from EVP_PKEY as uncompressed.
+ *
+ * The encoding OSSL_PKEY_PARAM_PUB_KEY yields follows the key's point
+ * conversion format, which is not uncompressed on every provider and
+ * version (OpenSSL 3.0.2 returns the 33-byte compressed form for a key
+ * generated from the group name alone). Ask for uncompressed explicitly,
+ * and report how many bytes were actually written so the caller cannot
+ * send the untouched remainder of its buffer. */
 static gboolean
-get_ec_pubpoint_bytes (EVP_PKEY *pkey, guint8 *out, gsize out_len)
+get_ec_pubpoint_bytes (EVP_PKEY *pkey, guint8 *out, gsize out_len,
+                       gsize *written)
 {
-  size_t len = 0;
+  BIGNUM *x = NULL, *y = NULL;
+  gboolean ok = FALSE;
 
-  if (EVP_PKEY_get_octet_string_param (pkey, OSSL_PKEY_PARAM_PUB_KEY,
-                                       NULL, 0, &len) != 1)
+  *written = 0;
+
+  if (out_len < 1 + 2 * TLS_EC_COORD_SIZE)
     return FALSE;
 
-  if (len > out_len)
-    return FALSE;
+  /* Build the point from its coordinates rather than reading the encoded
+   * form: OSSL_PKEY_PARAM_PUB_KEY honours the key's conversion format, and
+   * setting that format on an existing EVP_PKEY is not honoured on
+   * OpenSSL 3.0.2 (it keeps returning the 33-byte compressed point). */
+  if (EVP_PKEY_get_bn_param (pkey, OSSL_PKEY_PARAM_EC_PUB_X, &x) != 1 ||
+      EVP_PKEY_get_bn_param (pkey, OSSL_PKEY_PARAM_EC_PUB_Y, &y) != 1)
+    goto out;
 
-  return EVP_PKEY_get_octet_string_param (pkey, OSSL_PKEY_PARAM_PUB_KEY,
-                                          out, out_len, &len) == 1;
+  out[0] = 0x04;
+  if (BN_bn2binpad (x, out + 1, TLS_EC_COORD_SIZE) != TLS_EC_COORD_SIZE ||
+      BN_bn2binpad (y, out + 1 + TLS_EC_COORD_SIZE,
+                    TLS_EC_COORD_SIZE) != TLS_EC_COORD_SIZE)
+    goto out;
+
+  *written = 1 + 2 * TLS_EC_COORD_SIZE;
+  ok = TRUE;
+
+out:
+  BN_free (x);
+  BN_free (y);
+  return ok;
 }
 
 /* Build client finish message (Certificate + KeyExchange + CertVerify +
@@ -1469,14 +1495,26 @@ validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
   /* 2. ClientKeyExchange (type 0x10) */
   {
     guint8 pubpoint[65]; /* 0x04 + 32 + 32 */
-    get_ec_pubpoint_bytes (tls->session_key, pubpoint, sizeof (pubpoint));
+    gsize pubpoint_len = 0;
 
-    /* python-validity sends: 0x04 || to_bytes(x)[::-1] || to_bytes(y)[::-1]
-     * to_bytes() returns LE, [::-1] converts back to BE.
-     * So python-validity sends BE coordinates.
-     * OpenSSL gives us: 0x04 || x_be || y_be — already correct! */
-    guint8 *kex_body = pubpoint;  /* Use as-is, it's already BE */
-    gsize kex_body_len = 65;
+    /* python-validity sends 0x04 || x_be || y_be, so the sensor wants the
+     * uncompressed point; get_ec_pubpoint_bytes builds exactly that. */
+    if (!get_ec_pubpoint_bytes (tls->session_key, pubpoint,
+                                sizeof (pubpoint), &pubpoint_len) ||
+        pubpoint_len != sizeof (pubpoint) || pubpoint[0] != 0x04)
+      {
+        /* Anything else would put the untouched tail of the buffer on the
+         * wire; the sensor answers that with a fatal illegal_parameter. */
+        fp_warn ("TLS: ephemeral public key is not a 65-byte uncompressed "
+                 "point (got %zu bytes, first byte 0x%02x)",
+                 pubpoint_len, pubpoint_len ? pubpoint[0] : 0);
+        g_byte_array_free (output, TRUE);
+        g_byte_array_free (hs_msgs, TRUE);
+        return NULL;
+      }
+
+    guint8 *kex_body = pubpoint;
+    gsize kex_body_len = pubpoint_len;
 
     {
       GString *hex = g_string_new ("TLS kex_body: ");
@@ -1982,8 +2020,16 @@ tls_hs_send_client_finish (FpiSsm            *ssm,
     }
 
   /* Build and send Certificate + KeyExchange + CertVerify + CCS + Finished */
-  gsize cmd_len;
+  gsize cmd_len = 0;
   guint8 *cmd = validity_tls_build_client_finish (&self->tls, &cmd_len);
+
+  if (!cmd)
+    {
+      fpi_ssm_mark_failed (ssm,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
+                                                     "TLS: failed to build the client finish flight"));
+      return;
+    }
 
   transfer = fpi_usb_transfer_new (dev);
   transfer->short_is_error = TRUE;
