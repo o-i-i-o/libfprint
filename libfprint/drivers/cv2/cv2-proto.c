@@ -34,7 +34,11 @@
 #define CV2_CAPTURE_ARG 2
 #define CV2_CAPTURE_MODE_SAMPLE 0x23
 #define CV2_MATCH_ARG1 0x48
-#define CV2_MATCH_ARG2 0x53e2
+
+/* The match's false accept rate, scaled to 2^31: 0x53e2 is 1e-5, the chip's
+ * default (0x863 is 1e-6, 0x15 is 1e-8). A looser rate matches more touches
+ * of the right finger but also accepts other fingers. */
+#define CV2_MATCH_FAR 0x53e2
 
 /* The session's app and user IDs, as Dell's Linux drivers send them */
 #define CV2_APP_ID "myAppID"
@@ -235,7 +239,7 @@ cv2_build_match (guint32 session, const guint32 *templates, guint n_templates)
 
   msg_add_u32 (msg, session);
   msg_add_u32 (msg, CV2_MATCH_ARG1);
-  msg_add_u32 (msg, CV2_MATCH_ARG2);
+  msg_add_u32 (msg, CV2_MATCH_FAR);
   msg_add_u32 (msg, 0);
   msg_add_param (msg, CV2_PARAM_BLOCK, n_templates * 4, list, n_templates * 4);
   return msg_finish (msg);
