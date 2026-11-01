@@ -53,6 +53,10 @@
 /* Give up an enrollment that has not finished after this many accepted
  * samples (4 are normal; a degraded chip never finishes) */
 #define CV2_ENROLL_MAX_SAMPLES 30
+/* Give up an enrollment after this many retries in a row (touches the chip
+ * could not use, or samples it rejected). A sensor that never delivers a
+ * usable capture would otherwise be re-armed forever. */
+#define CV2_ENROLL_MAX_RETRIES 10
 
 /* State of the operation in progress. cv2_start_task () sets the inputs;
  * everything else starts at zero, and cv2_task_complete () clears it all. */
@@ -73,7 +77,8 @@ typedef struct
   guint8   result_id[CV2_CAPTURE_ID_LEN];
   gint     enroll_stage;
   guint    accepted_samples;
-  guint32  enrolled_id;        /* enroll: the new template's handle */
+  guint    retries;            /* retries since the last accepted sample */
+  guint32  enrolled_id;       /* enroll: the new template's handle */
   gboolean match_one_by_one;   /* only templates[match_pos] is being matched */
   guint    match_pos;
   guint    match_missing;      /* handles found missing one by one */
@@ -786,10 +791,22 @@ enum {
 };
 
 /* No usable sample (a touch too short, or a rejected sample): ask for
- * another press and capture again. Takes @error, a retry error. */
+ * another press and capture again, unless this has gone on too long.
+ * Takes @error, a retry error. */
 static void
 enroll_retry (FpiDeviceCv2 *self, GError *error)
 {
+  if (++self->op.retries > CV2_ENROLL_MAX_RETRIES)
+    {
+      g_clear_error (&error);
+      fpi_ssm_mark_failed (self->task_ssm,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_GENERAL,
+                                                     "No usable fingerprint capture after %u tries. "
+                                                     "Clean the sensor and try again.",
+                                                     CV2_ENROLL_MAX_RETRIES));
+      return;
+    }
+
   fpi_device_enroll_progress (FP_DEVICE (self), self->op.enroll_stage, NULL, error);
   fpi_ssm_jump_to_state (self->task_ssm, ENROLL_CAPTURE);
 }
@@ -830,6 +847,8 @@ enroll_sample_cb (FpiDeviceCv2   *self,
       fpi_ssm_mark_failed (ssm, error);
       return;
     }
+
+  self->op.retries = 0;
 
   /* Stages advance per accepted sample, but never reach the last stage
    * until the reader says the enrollment is complete. */
