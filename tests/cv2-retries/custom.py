@@ -22,6 +22,8 @@ assert d.get_driver() == 'cv2'
 d.open_sync()
 
 retries = 0
+# Set to the number of touches wanted while recording the retry cap
+tap_limit = None
 
 
 def enroll_progress(dev, stage, pnt, data, error):
@@ -30,6 +32,8 @@ def enroll_progress(dev, stage, pnt, data, error):
         assert error.matches(FPrint.DeviceRetry.quark(), FPrint.DeviceRetry.GENERAL), error
         retries += 1
     print('enroll progress: stage %d, error %s' % (stage, error))
+    if tap_limit and error and retries < tap_limit:
+        print('>>> Tap %d of %d: TAP the reader very briefly' % (retries + 1, tap_limit))
 
 
 def enroll(finger):
@@ -75,6 +79,27 @@ try:
     raise AssertionError('identify with every print missing succeeded')
 except GLib.Error as e:
     assert e.matches(FPrint.DeviceError.quark(), FPrint.DeviceError.DATA_NOT_FOUND), e
+
+# The driver gives up after 10 retries in a row, so the 11th brief touch
+# fails the enrollment (it gets no progress report).
+print('>>> Enroll RIGHT INDEX again, but never press: TAP the reader very briefly 11 times')
+retries = 0
+tap_limit = 11
+print('>>> Tap 1 of 11: TAP the reader very briefly')
+try:
+    enroll(FPrint.Finger.RIGHT_INDEX)
+    raise AssertionError('record again: the enrollment did not give up')
+except GLib.Error as e:
+    assert e.matches(FPrint.DeviceError.quark(), FPrint.DeviceError.GENERAL), e
+    assert 'Clean the sensor' in e.message, e
+assert retries == 10, 'record again: %d retries, not 10 (a tap was too long?)' % retries
+assert d.get_finger_status() == FPrint.FingerStatusFlags.NONE
+print('### Retry cap reached after 11 taps')
+
+print('>>> Enroll LEFT INDEX normally again: press firmly')
+p_again = enroll(FPrint.Finger.LEFT_INDEX)
+print('deleting the new print')
+d.delete_print_sync(p_again)
 
 d.close_sync()
 
