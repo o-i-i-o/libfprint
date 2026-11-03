@@ -96,6 +96,7 @@ static struct
   guint     stores;
   guint     users;
   guint     progress;
+  guint     live_write_enable_blobs;
   gboolean  final_before_readback;
   gboolean  readback_done;
   gboolean  suspend_done;
@@ -612,6 +613,8 @@ a2f_close (FpDevice *device)
   fpi_validity_capture_state_clear (&self->capture);
   fpi_validity_sensor_state_clear (&self->sensor);
   fpi_validity_tls_free (&self->tls);
+  fpi_validity_data_store_free (&self->device_data);
+  fpi_validity_data_store_free (&self->common_data);
   fpi_device_close_complete (device, NULL);
 }
 
@@ -834,6 +837,7 @@ run (Scn     *scn,
     }
   g_assert_true (fp_device_close_sync (dev, NULL, &error));
   g_assert_no_error (error);
+  g_assert_cmpuint (sim.live_write_enable_blobs, ==, 0);
   g_clear_pointer (&sim.frame, g_free);
   g_clear_pointer (&sim.identity, g_bytes_unref);
   sim.dev = NULL;
@@ -1300,6 +1304,15 @@ test_capture (void)
 /* Use made-up tables for the transport/SSM tests. The production entry
  * point's pinned table/blob checks are deliberately not relaxed. */
 static void
+moh_test_blob_released (gpointer data)
+{
+  guint *live = data;
+
+  g_assert_cmpuint (*live, >, 0);
+  (*live)--;
+}
+
+static void
 moh_test_start (FpDevice *device)
 {
   g_autofree gchar *dir = g_test_build_filename (G_TEST_DIST, "validity-moh", "tables-synthetic", NULL);
@@ -1314,7 +1327,9 @@ moh_test_start (FpDevice *device)
 
   g_assert_no_error (error);
   g_assert_nonnull (tables);
-  self->device_data.entries[VALIDITY_DATA_DB_WRITE_ENABLE] = g_bytes_new_static (blob, sizeof blob);
+  sim.live_write_enable_blobs++;
+  self->device_data.entries[VALIDITY_DATA_DB_WRITE_ENABLE] =
+    g_bytes_new_with_free_func (blob, sizeof blob, moh_test_blob_released, &sim.live_write_enable_blobs);
   d->builder = fpi_validity_moh_enroll_new (tables, 6, 1, 0);
   fpi_device_set_nr_enroll_stages (device, 6);
   fpi_device_get_enroll_data (device, &print);

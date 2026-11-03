@@ -324,6 +324,10 @@ if 'virtual_image' in drivers
 endif
 
 if 'validity' in drivers
+    if installed_tests
+        install_subdir('validity-moh', install_dir: installed_tests_testdir)
+    endif
+
     unit_tests += [
         'validity',
         # 06cb:00a2: the open/probe and verify/capture code paths of the
