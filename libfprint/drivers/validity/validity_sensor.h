@@ -93,9 +93,9 @@ typedef struct
  * Response format (after 2-byte status): zeroes(4LE) | version(2LE) | major(2LE).
  * Returns FALSE if the data is too short.
  */
-gboolean validity_sensor_parse_identify (const guint8        *data,
-                                         gsize                data_len,
-                                         ValiditySensorIdent *out);
+gboolean fpi_validity_sensor_parse_identify (const guint8        *data,
+                                             gsize                data_len,
+                                             ValiditySensorIdent *out);
 
 /* ---- HAL table lookups ---- */
 
@@ -105,21 +105,21 @@ gboolean validity_sensor_parse_identify (const guint8        *data,
  * falls back to fuzzy match when version_mask == 0.
  * Returns NULL if no match found.
  */
-const ValidityDeviceInfo *validity_device_info_lookup (guint16 major,
-                                                       guint16 version);
+const ValidityDeviceInfo *fpi_validity_device_info_lookup (guint16 major,
+                                                           guint16 version);
 
 /*
  * Look up a SensorTypeInfo entry by sensor type.
  * Returns NULL if the type is not in the table.
  */
-const ValiditySensorTypeInfo *validity_sensor_type_info_lookup (guint16 sensor_type);
+const ValiditySensorTypeInfo *fpi_validity_sensor_type_info_lookup (guint16 sensor_type);
 
 /*
  * TRUE for silicon that never emits the type-2 finger-down interrupt (sensor
  * types 0x969 and 0xd51); such sensors signal finger contact with a type-3
  * capture event instead. See validity_sensor.c for details.
  */
-gboolean validity_sensor_skips_finger_down (guint16 sensor_type);
+gboolean fpi_validity_sensor_skips_finger_down (guint16 sensor_type);
 
 /* ---- Command building ---- */
 
@@ -128,11 +128,11 @@ gboolean validity_sensor_skips_finger_down (guint16 sensor_type);
  * Format: cmd(1) | tag(2LE) | pad(2LE=0) | pad(4LE=0) = 9 bytes.
  * Returns the number of bytes written, or 0 if buf_len < 9.
  */
-gsize validity_sensor_build_factory_bits_cmd (guint16 tag,
-                                              guint8 *buf,
-                                              gsize   buf_len);
+gsize fpi_validity_sensor_build_factory_bits_cmd (guint16 tag,
+                                                  guint8 *buf,
+                                                  gsize   buf_len);
 
 /* ---- Lifecycle ---- */
 
-void validity_sensor_state_init (ValiditySensorState *state);
-void validity_sensor_state_clear (ValiditySensorState *state);
+void fpi_validity_sensor_state_init (ValiditySensorState *state);
+void fpi_validity_sensor_state_clear (ValiditySensorState *state);

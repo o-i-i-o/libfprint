@@ -68,52 +68,52 @@ extern const gchar *validity_data_search_paths[];
 #define VALIDITY_DATA_DIR_ENV "FP_VALIDITY_DATA_DIR"
 
 /* TRUE if this build honours the developer overrides */
-gboolean validity_dev_overrides_built (void);
+gboolean fpi_validity_dev_overrides_built (void);
 
 /* The FP_VALIDITY_DATA_DIR value in a developer build, else NULL */
-const gchar *validity_data_dev_dir (void);
+const gchar *fpi_validity_data_dev_dir (void);
 
 /* The search paths to use: validity_data_search_paths when @dev_dir is
  * NULL, else @dev_dir alone (never a fallback to the system paths). Fails
  * if @dev_dir is not an absolute path to a directory. Free with
  * g_strfreev(). */
-gchar  **validity_data_resolve_search_paths (const gchar *dev_dir,
-                                             GError     **error);
+gchar  **fpi_validity_data_resolve_search_paths (const gchar *dev_dir,
+                                                 GError     **error);
 
 /* Initialize a data store (all entries NULL) */
-void     validity_data_store_init (ValidityDataStore *store);
+void     fpi_validity_data_store_init (ValidityDataStore *store);
 
 /* Free all loaded data in a store */
-void     validity_data_store_free (ValidityDataStore *store);
+void     fpi_validity_data_store_free (ValidityDataStore *store);
 
 /* Load a single .bin file, verify its HMAC, and store in the given tag slot.
  * Returns TRUE on success. On failure, sets error and returns FALSE. */
-gboolean validity_data_load_file (ValidityDataStore *store,
-                                  ValidityDataTag    tag,
-                                  const gchar       *filepath,
-                                  GError           **error);
+gboolean fpi_validity_data_load_file (ValidityDataStore *store,
+                                      ValidityDataTag    tag,
+                                      const gchar       *filepath,
+                                      GError           **error);
 
 /* Load all per-device blob files for the given VID/PID.
  * Searches validity_data_search_paths for <vid>_<pid>/ subdirectory.
  * Returns TRUE if all required blobs found, FALSE with error otherwise. */
-gboolean validity_data_load_device (ValidityDataStore *store,
-                                    guint16            vid,
-                                    guint16            pid,
-                                    GError           **error);
+gboolean fpi_validity_data_load_device (ValidityDataStore *store,
+                                        guint16            vid,
+                                        guint16            pid,
+                                        GError           **error);
 
 /* Load all common data files (partition sigs, CA cert, TLS keys, etc.).
  * Returns TRUE if all files found, FALSE with error otherwise. */
-gboolean validity_data_load_common (ValidityDataStore *store,
-                                    GError           **error);
+gboolean fpi_validity_data_load_common (ValidityDataStore *store,
+                                        GError           **error);
 
 /* Get the raw data bytes for a given tag (without HMAC trailer).
  * Returns NULL if the tag has not been loaded. The returned GBytes
  * is owned by the store — do not unref. */
-GBytes  *validity_data_get (const ValidityDataStore *store,
-                            ValidityDataTag          tag);
+GBytes  *fpi_validity_data_get (const ValidityDataStore *store,
+                                ValidityDataTag          tag);
 
 /* Convenience: get raw data pointer and length for a tag.
  * Returns NULL with *len=0 if not loaded. */
-const guint8 *validity_data_get_bytes (const ValidityDataStore *store,
-                                       ValidityDataTag          tag,
-                                       gsize                   *len);
+const guint8 *fpi_validity_data_get_bytes (const ValidityDataStore *store,
+                                           ValidityDataTag          tag,
+                                           gsize                   *len);

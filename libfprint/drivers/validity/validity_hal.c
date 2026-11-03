@@ -139,7 +139,7 @@ static const ValidityDeviceDesc device_table[] = {
  * ================================================================ */
 
 const ValidityDeviceDesc *
-validity_hal_device_lookup (guint dev_type)
+fpi_validity_hal_device_lookup (guint dev_type)
 {
   if (dev_type >= G_N_ELEMENTS (device_table))
     return NULL;
@@ -148,7 +148,7 @@ validity_hal_device_lookup (guint dev_type)
 }
 
 const ValidityDeviceDesc *
-validity_hal_device_lookup_by_pid (guint16 vid, guint16 pid)
+fpi_validity_hal_device_lookup_by_pid (guint16 vid, guint16 pid)
 {
   for (gsize i = 0; i < G_N_ELEMENTS (device_table); i++)
     if (device_table[i].vid == vid && device_table[i].pid == pid)

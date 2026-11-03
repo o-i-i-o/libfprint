@@ -95,24 +95,24 @@ typedef struct
  * validity_capture_chunks_free). Sets n_chunks to the count.
  * Returns NULL on parse error.
  */
-ValidityCaptureChunk *validity_capture_split_chunks (const guint8 *data,
-                                                     gsize         data_len,
-                                                     gsize        *n_chunks);
+ValidityCaptureChunk *fpi_validity_capture_split_chunks (const guint8 *data,
+                                                         gsize         data_len,
+                                                         gsize        *n_chunks);
 
 /*
  * Merge an array of chunks back into a binary blob.
  * Caller must g_free() the returned buffer.
  * Returns NULL on error and sets out_len to 0.
  */
-guint8 *validity_capture_merge_chunks (const ValidityCaptureChunk *chunks,
-                                       gsize                       n_chunks,
-                                       gsize                      *out_len);
+guint8 *fpi_validity_capture_merge_chunks (const ValidityCaptureChunk *chunks,
+                                           gsize                       n_chunks,
+                                           gsize                      *out_len);
 
 /*
  * Free an array of chunks (including each chunk's data).
  */
-void validity_capture_chunks_free (ValidityCaptureChunk *chunks,
-                                   gsize                 n_chunks);
+void fpi_validity_capture_chunks_free (ValidityCaptureChunk *chunks,
+                                       gsize                 n_chunks);
 
 /* ================================================================
  * Timeslot instruction decoder
@@ -125,12 +125,12 @@ void validity_capture_chunks_free (ValidityCaptureChunk *chunks,
  *          operands in operands[] (up to 3), count in *n_operands.
  *          Returns FALSE if the instruction cannot be decoded.
  * ================================================================ */
-gboolean validity_capture_decode_insn (const guint8 *data,
-                                       gsize         data_len,
-                                       guint8       *opcode,
-                                       guint8       *insn_len,
-                                       guint32       operands[3],
-                                       guint8       *n_operands);
+gboolean fpi_validity_capture_decode_insn (const guint8 *data,
+                                           gsize         data_len,
+                                           guint8       *opcode,
+                                           guint8       *insn_len,
+                                           guint32       operands[3],
+                                           guint8       *n_operands);
 
 /* Timeslot instruction opcodes */
 #define TST_OP_NOOP 0
@@ -154,19 +154,19 @@ gboolean validity_capture_decode_insn (const guint8 *data,
  * Find the Nth instruction with the given opcode.
  * Returns the byte offset (pc) of the instruction, or -1 if not found.
  */
-gssize validity_capture_find_nth_insn (const guint8 *data,
-                                       gsize         data_len,
-                                       guint8        target_opcode,
-                                       guint         n);
+gssize fpi_validity_capture_find_nth_insn (const guint8 *data,
+                                           gsize         data_len,
+                                           guint8        target_opcode,
+                                           guint         n);
 
 /*
  * Find the Nth Register Write instruction to a specific register address.
  * Returns the byte offset (pc), or -1 if not found.
  */
-gssize validity_capture_find_nth_regwrite (const guint8 *data,
-                                           gsize         data_len,
-                                           guint32       reg_addr,
-                                           guint         n);
+gssize fpi_validity_capture_find_nth_regwrite (const guint8 *data,
+                                               gsize         data_len,
+                                               guint32       reg_addr,
+                                               guint         n);
 
 /* ================================================================
  * Timeslot table patching
@@ -178,10 +178,10 @@ gssize validity_capture_find_nth_regwrite (const guint8 *data,
  * multiply it by mult and optionally increment the address.
  * Modifies data in-place. Returns TRUE on success.
  */
-gboolean validity_capture_patch_timeslot_table (guint8  *data,
-                                                gsize    data_len,
-                                                gboolean inc_address,
-                                                guint8   mult);
+gboolean fpi_validity_capture_patch_timeslot_table (guint8  *data,
+                                                    gsize    data_len,
+                                                    gboolean inc_address,
+                                                    guint8   mult);
 
 /*
  * Second pass: find the register write to 0x8000203C in the Call
@@ -190,11 +190,11 @@ gboolean validity_capture_patch_timeslot_table (guint8  *data,
  * Modifies data in-place. Returns TRUE on success; FALSE means
  * no matching instruction was found (non-fatal).
  */
-gboolean validity_capture_patch_timeslot_again (guint8       *data,
-                                                gsize         data_len,
-                                                const guint8 *factory_calibration_values,
-                                                gsize         factory_cal_len,
-                                                guint16       key_calibration_line);
+gboolean fpi_validity_capture_patch_timeslot_again (guint8       *data,
+                                                    gsize         data_len,
+                                                    const guint8 *factory_calibration_values,
+                                                    gsize         factory_cal_len,
+                                                    guint16       key_calibration_line);
 
 /* ================================================================
  * build_cmd_02 — main capture command builder
@@ -210,10 +210,10 @@ gboolean validity_capture_patch_timeslot_again (guint8       *data,
  * Returns a newly-allocated buffer (caller must g_free) or NULL on error.
  * Sets out_len to the buffer size.
  */
-guint8 *validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
-                                       const ValiditySensorTypeInfo *type_info,
-                                       ValidityCaptureMode           mode,
-                                       gsize                        *out_len);
+guint8 *fpi_validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
+                                           const ValiditySensorTypeInfo *type_info,
+                                           ValidityCaptureMode           mode,
+                                           gsize                        *out_len);
 
 /* ================================================================
  * Factory bits parsing
@@ -230,12 +230,12 @@ guint8 *validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
  *
  * Returns TRUE if at least subtag 3 was found.
  */
-gboolean validity_capture_parse_factory_bits (const guint8 *data,
-                                              gsize         data_len,
-                                              guint8      **cal_values,
-                                              gsize        *cal_values_len,
-                                              guint8      **cal_data,
-                                              gsize        *cal_data_len);
+gboolean fpi_validity_capture_parse_factory_bits (const guint8 *data,
+                                                  gsize         data_len,
+                                                  guint8      **cal_values,
+                                                  gsize        *cal_values_len,
+                                                  guint8      **cal_data,
+                                                  gsize        *cal_data_len);
 
 /* ================================================================
  * Frame averaging
@@ -248,13 +248,13 @@ gboolean validity_capture_parse_factory_bits (const guint8 *data,
  * Returns a newly-allocated buffer (one frame), or NULL on error.
  * The caller must g_free() the buffer.
  */
-guint8 *validity_capture_average_frames (const guint8 *raw_data,
-                                         gsize         raw_len,
-                                         guint16       lines_per_frame,
-                                         guint16       bytes_per_line,
-                                         guint16       lines_per_calibration_data,
-                                         guint8        calibration_frames,
-                                         gsize        *out_len);
+guint8 *fpi_validity_capture_average_frames (const guint8 *raw_data,
+                                             gsize         raw_len,
+                                             guint16       lines_per_frame,
+                                             guint16       bytes_per_line,
+                                             guint16       lines_per_calibration_data,
+                                             guint8        calibration_frames,
+                                             gsize        *out_len);
 
 /* ================================================================
  * Calibration data processing
@@ -268,11 +268,11 @@ guint8 *validity_capture_average_frames (const guint8 *raw_data,
  * If calib_data is NULL, initializes from the frame.
  * If non-NULL, combines (adds signed values, clips).
  */
-void validity_capture_process_calibration (guint8      **calib_data,
-                                           gsize        *calib_data_len,
-                                           const guint8 *averaged_frame,
-                                           gsize         frame_len,
-                                           guint16       bytes_per_line);
+void fpi_validity_capture_process_calibration (guint8      **calib_data,
+                                               gsize        *calib_data_len,
+                                               const guint8 *averaged_frame,
+                                               gsize         frame_len,
+                                               guint16       bytes_per_line);
 
 /*
  * Build the clean slate format for flash persistence.
@@ -281,16 +281,16 @@ void validity_capture_process_calibration (guint8      **calib_data,
  *
  * Returns a newly-allocated buffer or NULL on error.
  */
-guint8 *validity_capture_build_clean_slate (const guint8 *averaged_frame,
-                                            gsize         frame_len,
-                                            gsize        *out_len);
+guint8 *fpi_validity_capture_build_clean_slate (const guint8 *averaged_frame,
+                                                gsize         frame_len,
+                                                gsize        *out_len);
 
 /*
  * Verify clean slate format (check magic and SHA256 hash).
  * Returns TRUE if the format is valid.
  */
-gboolean validity_capture_verify_clean_slate (const guint8 *data,
-                                              gsize         data_len);
+gboolean fpi_validity_capture_verify_clean_slate (const guint8 *data,
+                                                  gsize         data_len);
 
 /* ================================================================
  * Bitpack — compress factory calibration values for Line Update
@@ -306,11 +306,11 @@ gboolean validity_capture_verify_clean_slate (const guint8 *data,
  *
  * Returns a newly-allocated buffer or NULL on error.
  */
-guint8 *validity_capture_bitpack (const guint8 *values,
-                                  gsize         values_len,
-                                  guint8       *out_v0,
-                                  guint8       *out_v1,
-                                  gsize        *out_len);
+guint8 *fpi_validity_capture_bitpack (const guint8 *values,
+                                      gsize         values_len,
+                                      guint8       *out_v0,
+                                      guint8       *out_v1,
+                                      gsize        *out_len);
 
 /* ================================================================
  * Finger ID mapping
@@ -320,13 +320,13 @@ guint8 *validity_capture_bitpack (const guint8 *values,
  * Map FpFinger enum value to VCSFW finger subtype (1-10).
  * Returns 0 if the finger is not recognized.
  */
-guint16 validity_finger_to_subtype (guint finger);
+guint16 fpi_validity_finger_to_subtype (guint finger);
 
 /*
  * Map VCSFW finger subtype (1-10) to FpFinger enum value.
  * Returns -1 if the subtype is not recognized.
  */
-gint validity_subtype_to_finger (guint16 subtype);
+gint fpi_validity_subtype_to_finger (guint16 subtype);
 
 /* ================================================================
  * LED control commands — for user feedback during capture
@@ -336,13 +336,13 @@ gint validity_subtype_to_finger (guint16 subtype);
  * Build the LED "glow start scan" command (sent via TLS app).
  * Returns a static buffer and sets out_len.
  */
-const guint8 *validity_capture_glow_start_cmd (gsize *out_len);
+const guint8 *fpi_validity_capture_glow_start_cmd (gsize *out_len);
 
 /*
  * Build the LED "glow end scan" command (sent via TLS app).
  * Returns a static buffer and sets out_len.
  */
-const guint8 *validity_capture_glow_end_cmd (gsize *out_len);
+const guint8 *fpi_validity_capture_glow_end_cmd (gsize *out_len);
 
 /* ================================================================
  * CaptureProg table lookup
@@ -353,30 +353,30 @@ const guint8 *validity_capture_glow_end_cmd (gsize *out_len);
  * Returns a pointer to the static blob data and sets out_len.
  * Returns NULL if no matching entry is found.
  */
-const guint8 *validity_capture_prog_lookup (guint8  rom_major,
-                                            guint8  rom_minor,
-                                            guint16 dev_type,
-                                            gsize  *out_len);
+const guint8 *fpi_validity_capture_prog_lookup (guint8  rom_major,
+                                                guint8  rom_minor,
+                                                guint16 dev_type,
+                                                gsize  *out_len);
 
 /* ================================================================
  * Capture state lifecycle
  * ================================================================ */
 
-void validity_capture_state_init (ValidityCaptureState *state);
-void validity_capture_state_clear (ValidityCaptureState *state);
+void fpi_validity_capture_state_init (ValidityCaptureState *state);
+void fpi_validity_capture_state_clear (ValidityCaptureState *state);
 
 /*
  * Initialize capture state from sensor info and factory bits.
  * Loads the CaptureProg, computes geometry, sets calibration params.
  * Returns TRUE on success.
  */
-gboolean validity_capture_state_setup (ValidityCaptureState         *state,
-                                       const ValiditySensorTypeInfo *type_info,
-                                       guint16                       dev_type,
-                                       guint8                        rom_major,
-                                       guint8                        rom_minor,
-                                       const guint8                 *factory_bits,
-                                       gsize                         factory_bits_len);
+gboolean fpi_validity_capture_state_setup (ValidityCaptureState         *state,
+                                           const ValiditySensorTypeInfo *type_info,
+                                           guint16                       dev_type,
+                                           guint8                        rom_major,
+                                           guint8                        rom_minor,
+                                           const guint8                 *factory_bits,
+                                           gsize                         factory_bits_len);
 
 /* Chunk type IDs used in capture programs */
 #define CAPT_CHUNK_REPLY_CONFIG 0x0017

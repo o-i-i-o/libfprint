@@ -36,9 +36,9 @@
  * ================================================================ */
 
 ValidityCaptureChunk *
-validity_capture_split_chunks (const guint8 *data,
-                               gsize         data_len,
-                               gsize        *n_chunks)
+fpi_validity_capture_split_chunks (const guint8 *data,
+                                   gsize         data_len,
+                                   gsize        *n_chunks)
 {
   GArray *arr;
   FpiByteReader reader;
@@ -79,9 +79,9 @@ validity_capture_split_chunks (const guint8 *data,
 }
 
 guint8 *
-validity_capture_merge_chunks (const ValidityCaptureChunk *chunks,
-                               gsize                       n_chunks,
-                               gsize                      *out_len)
+fpi_validity_capture_merge_chunks (const ValidityCaptureChunk *chunks,
+                                   gsize                       n_chunks,
+                                   gsize                      *out_len)
 {
   gsize total = 0;
   FpiByteWriter writer;
@@ -107,8 +107,8 @@ validity_capture_merge_chunks (const ValidityCaptureChunk *chunks,
 }
 
 void
-validity_capture_chunks_free (ValidityCaptureChunk *chunks,
-                              gsize                 n_chunks)
+fpi_validity_capture_chunks_free (ValidityCaptureChunk *chunks,
+                                  gsize                 n_chunks)
 {
   if (chunks == NULL)
     return;
@@ -126,12 +126,12 @@ validity_capture_chunks_free (ValidityCaptureChunk *chunks,
  * ================================================================ */
 
 gboolean
-validity_capture_decode_insn (const guint8 *data,
-                              gsize         data_len,
-                              guint8       *opcode,
-                              guint8       *insn_len,
-                              guint32       operands[3],
-                              guint8       *n_operands)
+fpi_validity_capture_decode_insn (const guint8 *data,
+                                  gsize         data_len,
+                                  guint8       *opcode,
+                                  guint8       *insn_len,
+                                  guint32       operands[3],
+                                  guint8       *n_operands)
 {
   g_return_val_if_fail (data != NULL && data_len > 0, FALSE);
   g_return_val_if_fail (opcode != NULL && insn_len != NULL, FALSE);
@@ -282,10 +282,10 @@ validity_capture_decode_insn (const guint8 *data,
 }
 
 gssize
-validity_capture_find_nth_insn (const guint8 *data,
-                                gsize         data_len,
-                                guint8        target_opcode,
-                                guint         n)
+fpi_validity_capture_find_nth_insn (const guint8 *data,
+                                    gsize         data_len,
+                                    guint8        target_opcode,
+                                    guint         n)
 {
   gsize pc = 0;
 
@@ -294,8 +294,8 @@ validity_capture_find_nth_insn (const guint8 *data,
       guint8 opcode, len, n_ops;
       guint32 operands[3];
 
-      if (!validity_capture_decode_insn (data + pc, data_len - pc,
-                                         &opcode, &len, operands, &n_ops))
+      if (!fpi_validity_capture_decode_insn (data + pc, data_len - pc,
+                                             &opcode, &len, operands, &n_ops))
         break;
 
       if (opcode == target_opcode)
@@ -312,10 +312,10 @@ validity_capture_find_nth_insn (const guint8 *data,
 }
 
 gssize
-validity_capture_find_nth_regwrite (const guint8 *data,
-                                    gsize         data_len,
-                                    guint32       reg_addr,
-                                    guint         n)
+fpi_validity_capture_find_nth_regwrite (const guint8 *data,
+                                        gsize         data_len,
+                                        guint32       reg_addr,
+                                        guint         n)
 {
   gsize pc = 0;
 
@@ -324,8 +324,8 @@ validity_capture_find_nth_regwrite (const guint8 *data,
       guint8 opcode, len, n_ops;
       guint32 operands[3];
 
-      if (!validity_capture_decode_insn (data + pc, data_len - pc,
-                                         &opcode, &len, operands, &n_ops))
+      if (!fpi_validity_capture_decode_insn (data + pc, data_len - pc,
+                                             &opcode, &len, operands, &n_ops))
         break;
 
       if (opcode == TST_OP_REG_WRITE && n_ops >= 2 && operands[0] == reg_addr)
@@ -346,10 +346,10 @@ validity_capture_find_nth_regwrite (const guint8 *data,
  * ================================================================ */
 
 gboolean
-validity_capture_patch_timeslot_table (guint8  *data,
-                                       gsize    data_len,
-                                       gboolean inc_address,
-                                       guint8   mult)
+fpi_validity_capture_patch_timeslot_table (guint8  *data,
+                                           gsize    data_len,
+                                           gboolean inc_address,
+                                           guint8   mult)
 {
   gsize i = 0;
 
@@ -392,11 +392,11 @@ validity_capture_patch_timeslot_table (guint8  *data,
 }
 
 gboolean
-validity_capture_patch_timeslot_again (guint8       *data,
-                                       gsize         data_len,
-                                       const guint8 *factory_calibration_values,
-                                       gsize         factory_cal_len,
-                                       guint16       key_calibration_line)
+fpi_validity_capture_patch_timeslot_again (guint8       *data,
+                                           gsize         data_len,
+                                           const guint8 *factory_calibration_values,
+                                           gsize         factory_cal_len,
+                                           guint16       key_calibration_line)
 {
   gssize call_target = -1;
   gsize pc = 0;
@@ -411,8 +411,8 @@ validity_capture_patch_timeslot_again (guint8       *data,
       guint8 opcode, len, n_ops;
       guint32 operands[3];
 
-      if (!validity_capture_decode_insn (data + pc, data_len - pc,
-                                         &opcode, &len, operands, &n_ops))
+      if (!fpi_validity_capture_decode_insn (data + pc, data_len - pc,
+                                             &opcode, &len, operands, &n_ops))
         break;
 
       /* End of Table, Return, End of Data — stop scanning */
@@ -438,8 +438,8 @@ validity_capture_patch_timeslot_again (guint8       *data,
       guint8 opcode, len, n_ops;
       guint32 operands[3];
 
-      if (!validity_capture_decode_insn (data + pc, data_len - pc,
-                                         &opcode, &len, operands, &n_ops))
+      if (!fpi_validity_capture_decode_insn (data + pc, data_len - pc,
+                                             &opcode, &len, operands, &n_ops))
         break;
 
       if (opcode == TST_OP_END_OF_TABLE ||
@@ -508,11 +508,11 @@ add_signed_bytes (guint8 l, guint8 r)
  * ================================================================ */
 
 guint8 *
-validity_capture_bitpack (const guint8 *values,
-                          gsize         values_len,
-                          guint8       *out_v0,
-                          guint8       *out_v1,
-                          gsize        *out_len)
+fpi_validity_capture_bitpack (const guint8 *values,
+                              gsize         values_len,
+                              guint8       *out_v0,
+                              guint8       *out_v1,
+                              gsize        *out_len)
 {
   guint8 min_val = 0xff, max_val = 0;
   guint8 useful_bits;
@@ -685,14 +685,14 @@ build_line_update_type1 (const ValidityCaptureState   *capture,
       /* Patch Timeslot Table 2D */
       if (c.type == CAPT_CHUNK_TIMESLOT_2D && c.data && c.size > 0)
         {
-          validity_capture_patch_timeslot_table (c.data, c.size, TRUE,
-                                                 type_info->repeat_multiplier);
+          fpi_validity_capture_patch_timeslot_table (c.data, c.size, TRUE,
+                                                     type_info->repeat_multiplier);
           if (mode != VALIDITY_CAPTURE_CALIBRATE)
             {
-              validity_capture_patch_timeslot_again (c.data, c.size,
-                                                     capture->factory_calibration_values,
-                                                     capture->factory_calibration_values_len,
-                                                     capture->key_calibration_line);
+              fpi_validity_capture_patch_timeslot_again (c.data, c.size,
+                                                         capture->factory_calibration_values,
+                                                         capture->factory_calibration_values_len,
+                                                         capture->key_calibration_line);
             }
 
           /* Save the patched TST before key_line replacement.
@@ -857,8 +857,8 @@ build_line_update_type1 (const ValidityCaptureState   *capture,
       gsize tst_len = patched_tst_len;
       /* Line 0: calibration blob at Enable Rx position */
       {
-        gssize pc = validity_capture_find_nth_insn (tst_data, tst_len,
-                                                    TST_OP_ENABLE_RX, 2);
+        gssize pc = fpi_validity_capture_find_nth_insn (tst_data, tst_len,
+                                                        TST_OP_ENABLE_RX, 2);
         if (pc >= 0 && type_info->calibration_blob)
           {
             LineEntry le = { 0 };
@@ -875,8 +875,8 @@ build_line_update_type1 (const ValidityCaptureState   *capture,
 
       /* Line 1: factory calibration values at Register Write position */
       {
-        gssize pc = validity_capture_find_nth_regwrite (tst_data, tst_len,
-                                                        0x8000203C, 1);
+        gssize pc = fpi_validity_capture_find_nth_regwrite (tst_data, tst_len,
+                                                            0x8000203C, 1);
         if (pc >= 0 && capture->factory_calibration_values)
           {
             LineEntry le = { 0 };
@@ -884,7 +884,7 @@ build_line_update_type1 (const ValidityCaptureState   *capture,
             le.flags = ((guint32) (pc + 1)) | ((guint32) cnt << 0x14) | 0x7000000;
 
             /* Bitpack the factory calibration values */
-            le.data = validity_capture_bitpack (
+            le.data = fpi_validity_capture_bitpack (
               capture->factory_calibration_values,
               capture->factory_calibration_values_len,
               &le.v0, &le.v1, &le.data_len);
@@ -1031,10 +1031,10 @@ build_line_update_type1 (const ValidityCaptureState   *capture,
  * ================================================================ */
 
 guint8 *
-validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
-                               const ValiditySensorTypeInfo *type_info,
-                               ValidityCaptureMode           mode,
-                               gsize                        *out_len)
+fpi_validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
+                                   const ValiditySensorTypeInfo *type_info,
+                                   ValidityCaptureMode           mode,
+                                   gsize                        *out_len)
 {
   ValidityCaptureChunk *chunks = NULL;
   ValidityCaptureChunk *patched = NULL;
@@ -1053,9 +1053,9 @@ validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
   *out_len = 0;
 
   /* Split the capture program into chunks */
-  chunks = validity_capture_split_chunks (capture->capture_prog,
-                                          capture->capture_prog_len,
-                                          &n_chunks);
+  chunks = fpi_validity_capture_split_chunks (capture->capture_prog,
+                                              capture->capture_prog_len,
+                                              &n_chunks);
   if (!chunks)
     return NULL;
 
@@ -1069,11 +1069,11 @@ validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
     {
       /* Type 2 devices — not yet implemented (0x9d, 0x97, etc.) */
       fp_warn ("Line update type 2 not yet implemented");
-      validity_capture_chunks_free (chunks, n_chunks);
+      fpi_validity_capture_chunks_free (chunks, n_chunks);
       return NULL;
     }
 
-  validity_capture_chunks_free (chunks, n_chunks);
+  fpi_validity_capture_chunks_free (chunks, n_chunks);
 
   if (!patched)
     return NULL;
@@ -1084,8 +1084,8 @@ validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
             i, patched[i].type, patched[i].size);
 
   /* Merge chunks back to binary */
-  merged = validity_capture_merge_chunks (patched, n_patched, &merged_len);
-  validity_capture_chunks_free (patched, n_patched);
+  merged = fpi_validity_capture_merge_chunks (patched, n_patched, &merged_len);
+  fpi_validity_capture_chunks_free (patched, n_patched);
 
   if (!merged)
     return NULL;
@@ -1127,12 +1127,12 @@ validity_capture_build_cmd_02 (const ValidityCaptureState   *capture,
  * ================================================================ */
 
 gboolean
-validity_capture_parse_factory_bits (const guint8 *data,
-                                     gsize         data_len,
-                                     guint8      **cal_values,
-                                     gsize        *cal_values_len,
-                                     guint8      **cal_data,
-                                     gsize        *cal_data_len)
+fpi_validity_capture_parse_factory_bits (const guint8 *data,
+                                         gsize         data_len,
+                                         guint8      **cal_values,
+                                         gsize        *cal_values_len,
+                                         guint8      **cal_data,
+                                         gsize        *cal_data_len)
 {
   FpiByteReader reader;
   guint32 wtf, entries;
@@ -1211,13 +1211,13 @@ validity_capture_parse_factory_bits (const guint8 *data,
  * ================================================================ */
 
 guint8 *
-validity_capture_average_frames (const guint8 *raw_data,
-                                 gsize         raw_len,
-                                 guint16       lines_per_frame,
-                                 guint16       bytes_per_line,
-                                 guint16       lines_per_calibration_data,
-                                 guint8        calibration_frames,
-                                 gsize        *out_len)
+fpi_validity_capture_average_frames (const guint8 *raw_data,
+                                     gsize         raw_len,
+                                     guint16       lines_per_frame,
+                                     guint16       bytes_per_line,
+                                     guint16       lines_per_calibration_data,
+                                     guint8        calibration_frames,
+                                     gsize        *out_len)
 {
   gsize frame_size;
   guint16 interleave_lines;
@@ -1330,11 +1330,11 @@ validity_capture_average_frames (const guint8 *raw_data,
  * ================================================================ */
 
 void
-validity_capture_process_calibration (guint8      **calib_data,
-                                      gsize        *calib_data_len,
-                                      const guint8 *averaged_frame,
-                                      gsize         frame_len,
-                                      guint16       bytes_per_line)
+fpi_validity_capture_process_calibration (guint8      **calib_data,
+                                          gsize        *calib_data_len,
+                                          const guint8 *averaged_frame,
+                                          gsize         frame_len,
+                                          guint16       bytes_per_line)
 {
   guint8 *frame_scaled;
 
@@ -1389,9 +1389,9 @@ validity_capture_process_calibration (guint8      **calib_data,
  * ================================================================ */
 
 guint8 *
-validity_capture_build_clean_slate (const guint8 *averaged_frame,
-                                    gsize         frame_len,
-                                    gsize        *out_len)
+fpi_validity_capture_build_clean_slate (const guint8 *averaged_frame,
+                                        gsize         frame_len,
+                                        gsize        *out_len)
 {
   /* Inner payload: data_len(2LE) | data | trailing_zero(2LE=0) */
   gsize inner_payload_len = 2 + frame_len + 2;
@@ -1435,8 +1435,8 @@ validity_capture_build_clean_slate (const guint8 *averaged_frame,
 }
 
 gboolean
-validity_capture_verify_clean_slate (const guint8 *data,
-                                     gsize         data_len)
+fpi_validity_capture_verify_clean_slate (const guint8 *data,
+                                         gsize         data_len)
 {
   guint16 magic, inner_len;
   const guint8 *hash_stored;
@@ -1486,7 +1486,7 @@ validity_capture_verify_clean_slate (const guint8 *data,
  * ================================================================ */
 
 guint16
-validity_finger_to_subtype (guint finger)
+fpi_validity_finger_to_subtype (guint finger)
 {
   /* FpFinger values: FP_FINGER_LEFT_THUMB=1 through FP_FINGER_RIGHT_LITTLE=10 */
   if (finger >= 1 && finger <= 10)
@@ -1495,7 +1495,7 @@ validity_finger_to_subtype (guint finger)
 }
 
 gint
-validity_subtype_to_finger (guint16 subtype)
+fpi_validity_subtype_to_finger (guint16 subtype)
 {
   if (subtype >= 1 && subtype <= 10)
     return (gint) subtype;
@@ -1548,14 +1548,14 @@ static const guint8 glow_end_data[] = {
 };
 
 const guint8 *
-validity_capture_glow_start_cmd (gsize *out_len)
+fpi_validity_capture_glow_start_cmd (gsize *out_len)
 {
   *out_len = sizeof (glow_start_data);
   return glow_start_data;
 }
 
 const guint8 *
-validity_capture_glow_end_cmd (gsize *out_len)
+fpi_validity_capture_glow_end_cmd (gsize *out_len)
 {
   *out_len = sizeof (glow_end_data);
   return glow_end_data;
@@ -1716,10 +1716,10 @@ static const guint16 line_update_type1_devices[] = {
 };
 
 const guint8 *
-validity_capture_prog_lookup (guint8  rom_major,
-                              guint8  rom_minor,
-                              guint16 dev_type,
-                              gsize  *out_len)
+fpi_validity_capture_prog_lookup (guint8  rom_major,
+                                  guint8  rom_minor,
+                                  guint16 dev_type,
+                                  gsize  *out_len)
 {
   g_return_val_if_fail (out_len != NULL, NULL);
 
@@ -1757,13 +1757,13 @@ validity_capture_prog_lookup (guint8  rom_major,
  * ================================================================ */
 
 void
-validity_capture_state_init (ValidityCaptureState *state)
+fpi_validity_capture_state_init (ValidityCaptureState *state)
 {
   memset (state, 0, sizeof (*state));
 }
 
 void
-validity_capture_state_clear (ValidityCaptureState *state)
+fpi_validity_capture_state_clear (ValidityCaptureState *state)
 {
   g_clear_pointer (&state->factory_calibration_values, g_free);
   g_clear_pointer (&state->factory_calib_data, g_free);
@@ -1772,13 +1772,13 @@ validity_capture_state_clear (ValidityCaptureState *state)
 }
 
 gboolean
-validity_capture_state_setup (ValidityCaptureState         *state,
-                              const ValiditySensorTypeInfo *type_info,
-                              guint16                       dev_type,
-                              guint8                        rom_major,
-                              guint8                        rom_minor,
-                              const guint8                 *factory_bits,
-                              gsize                         factory_bits_len)
+fpi_validity_capture_state_setup (ValidityCaptureState         *state,
+                                  const ValiditySensorTypeInfo *type_info,
+                                  guint16                       dev_type,
+                                  guint8                        rom_major,
+                                  guint8                        rom_minor,
+                                  const guint8                 *factory_bits,
+                                  gsize                         factory_bits_len)
 {
   const guint8 *prog;
   gsize prog_len;
@@ -1787,7 +1787,7 @@ validity_capture_state_setup (ValidityCaptureState         *state,
   g_return_val_if_fail (type_info != NULL, FALSE);
 
   /* Look up capture program */
-  prog = validity_capture_prog_lookup (rom_major, rom_minor, dev_type, &prog_len);
+  prog = fpi_validity_capture_prog_lookup (rom_major, rom_minor, dev_type, &prog_len);
   if (!prog)
     {
       fp_warn ("No capture program for rom %d.%d, dev_type 0x%04x",
@@ -1812,7 +1812,7 @@ validity_capture_state_setup (ValidityCaptureState         *state,
   /* Extract lines_per_frame from the 2D params chunk */
   {
     gsize n_chunks = 0;
-    ValidityCaptureChunk *chunks = validity_capture_split_chunks (prog, prog_len, &n_chunks);
+    ValidityCaptureChunk *chunks = fpi_validity_capture_split_chunks (prog, prog_len, &n_chunks);
     if (chunks)
       {
         for (gsize i = 0; i < n_chunks; i++)
@@ -1825,7 +1825,7 @@ validity_capture_state_setup (ValidityCaptureState         *state,
                 break;
               }
           }
-        validity_capture_chunks_free (chunks, n_chunks);
+        fpi_validity_capture_chunks_free (chunks, n_chunks);
       }
   }
 
@@ -1843,11 +1843,11 @@ validity_capture_state_setup (ValidityCaptureState         *state,
   /* Parse factory bits if available */
   if (factory_bits && factory_bits_len > 0)
     {
-      validity_capture_parse_factory_bits (factory_bits, factory_bits_len,
-                                           &state->factory_calibration_values,
-                                           &state->factory_calibration_values_len,
-                                           &state->factory_calib_data,
-                                           &state->factory_calib_data_len);
+      fpi_validity_capture_parse_factory_bits (factory_bits, factory_bits_len,
+                                               &state->factory_calibration_values,
+                                               &state->factory_calibration_values_len,
+                                               &state->factory_calib_data,
+                                               &state->factory_calib_data_len);
     }
 
   return TRUE;

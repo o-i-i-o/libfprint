@@ -524,7 +524,7 @@ fpi_validity_a2_parse_match_result (const guint8        *data,
   if (parse_match_result (data, data_len, result, error))
     return TRUE;
 
-  validity_match_result_clear (result);
+  fpi_validity_match_result_clear (result);
   return FALSE;
 }
 
@@ -600,8 +600,8 @@ void
 fpi_validity_a2_flow_clear (ValidityA2Flow *flow)
 {
   fpi_validity_a2_readout_clear (&flow->readout);
-  validity_match_result_clear (&flow->result);
-  validity_user_clear (&flow->user);
+  fpi_validity_match_result_clear (&flow->result);
+  fpi_validity_user_clear (&flow->user);
   g_clear_error (&flow->error);
   memset (flow, 0, sizeof (*flow));
 }
@@ -873,10 +873,10 @@ flow_match_result_reply (ValidityA2Flow *flow,
       return;
     }
 
-  validity_match_result_clear (&flow->result);
+  fpi_validity_match_result_clear (&flow->result);
   if (!fpi_validity_a2_parse_match_result (data, data_len, &flow->result, &error))
     {
-      validity_match_result_clear (&flow->result);
+      fpi_validity_match_result_clear (&flow->result);
       flow_finish (flow, VALIDITY_A2_OUTCOME_ERROR, error);
       return;
     }
@@ -909,12 +909,12 @@ fpi_validity_a2_flow_reply (ValidityA2Flow *flow,
     {
       if (op == VALIDITY_A2_OP_GET_USER)
         {
-          validity_user_clear (&flow->user);
+          fpi_validity_user_clear (&flow->user);
           flow->user_read = status == VCSFW_STATUS_OK && data != NULL &&
-                            validity_db_parse_user (data, data_len, &flow->user);
+                            fpi_validity_db_parse_user (data, data_len, &flow->user);
           if (!flow->user_read)
             {
-              validity_user_clear (&flow->user);
+              fpi_validity_user_clear (&flow->user);
               fp_warn ("Could not read the matched user record "
                        "(status 0x%04x)", status);
             }
@@ -1151,12 +1151,12 @@ fpi_validity_a2_flow_build_cmd (const ValidityA2Flow *flow,
   switch (op)
     {
     case VALIDITY_A2_OP_GLOW_START:
-      stat = validity_capture_glow_start_cmd (&len);
+      stat = fpi_validity_capture_glow_start_cmd (&len);
       *out_len = len;
       return g_memdup2 (stat, len);
 
     case VALIDITY_A2_OP_GLOW_END:
-      stat = validity_capture_glow_end_cmd (&len);
+      stat = fpi_validity_capture_glow_end_cmd (&len);
       *out_len = len;
       return g_memdup2 (stat, len);
 
@@ -1184,8 +1184,8 @@ fpi_validity_a2_flow_build_cmd (const ValidityA2Flow *flow,
     case VALIDITY_A2_OP_GET_USER:
       if (flow->result.user_dbid > G_MAXUINT16)
         return NULL;
-      return validity_db_build_cmd_get_user ((guint16) flow->result.user_dbid,
-                                             out_len);
+      return fpi_validity_db_build_cmd_get_user ((guint16) flow->result.user_dbid,
+                                                 out_len);
 
     case VALIDITY_A2_OP_CAPTURE:          /* built by the caller */
     case VALIDITY_A2_OP_NONE:

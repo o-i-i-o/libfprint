@@ -53,7 +53,7 @@ static const FpIdEntry id_table[] = {
  * rather than a generic protocol failure. Takes ownership of @error and returns
  * the (possibly replaced) error. */
 GError *
-validity_map_removed_error (GError *error)
+fpi_validity_map_removed_error (GError *error)
 {
   if (error &&
       g_error_matches (error, G_USB_DEVICE_ERROR, G_USB_DEVICE_ERROR_NO_DEVICE))
@@ -70,8 +70,8 @@ validity_map_removed_error (GError *error)
  * SESSION_LOST refinement lands with the recovery wiring, so a chip-reset TLS
  * alert currently classifies as FATAL (aborts, as before). */
 ValidityErrClass
-validity_classify_error (const GError *error,
-                         gboolean      device_alive)
+fpi_validity_classify_error (const GError *error,
+                             gboolean      device_alive)
 {
   if (error == NULL)
     return VALIDITY_ERR_NONE;
@@ -133,7 +133,7 @@ dev_probe (FpDevice *device)
   * "garbage" prints and clears the storage before a first enrollment). */
   fpi_device_update_features (device,
                               fpi_validity_policy_features_to_clear (fpi_validity_device_policy (self->dev_type),
-                                                                     validity_dev_overrides_built ()),
+                                                                     fpi_validity_dev_overrides_built ()),
                               0);
 
   usb_dev = fpi_device_get_usb_device (device);
@@ -141,7 +141,7 @@ dev_probe (FpDevice *device)
   if (!g_usb_device_open (usb_dev, &error))
     {
       fpi_device_probe_complete (device, NULL, NULL,
-                                 validity_map_removed_error (error));
+                                 fpi_validity_map_removed_error (error));
       return;
     }
 
@@ -196,9 +196,9 @@ dev_probe (FpDevice *device)
     }
 
   /* Parse version info (data after the 2-byte status) */
-  if (!vcsfw_parse_version (transfer->buffer + 2,
-                            transfer->actual_length - 2,
-                            &self->version_info))
+  if (!fpi_vcsfw_parse_version (transfer->buffer + 2,
+                                transfer->actual_length - 2,
+                                &self->version_info))
     {
       g_warning ("Failed to parse GET_VERSION response");
       error = fpi_device_error_new (FP_DEVICE_ERROR_PROTO);
@@ -343,7 +343,7 @@ fw_info_recv_cb (FpiUsbTransfer *transfer,
   if (transfer->actual_length >= 2)
     {
       guint16 status = 0;
-      vcsfw_parse_status (transfer->buffer, transfer->actual_length, &status);
+      fpi_vcsfw_parse_status (transfer->buffer, transfer->actual_length, &status);
       if (status == VCSFW_STATUS_OK)
         {
           self->fwext_loaded = TRUE;
@@ -482,7 +482,7 @@ pair_ssm_done (FpiSsm   *ssm,
       if (self->pair_state.refused)
         {
           fp_warn ("Pairing refused: %s", error->message);
-          validity_pair_state_free (&self->pair_state);
+          fpi_validity_pair_state_free (&self->pair_state);
           fpi_ssm_mark_failed (self->open_ssm, error);
           return;
         }
@@ -517,7 +517,7 @@ pair_ssm_done (FpiSsm   *ssm,
       /* Pairing was performed and device is rebooting.
        * Signal to fprintd to retry the open. */
       fp_info ("Pairing complete — device rebooting, signalling removal");
-      validity_pair_state_free (&self->pair_state);
+      fpi_validity_pair_state_free (&self->pair_state);
       fpi_ssm_mark_failed (self->open_ssm,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_REMOVED,
                                                      "Device rebooting after pairing"));
@@ -526,7 +526,7 @@ pair_ssm_done (FpiSsm   *ssm,
 
   /* Keys present (pairing not needed), or a pairing error that was not a
    * refusal -- continue */
-  validity_pair_state_free (&self->pair_state);
+  fpi_validity_pair_state_free (&self->pair_state);
   fpi_ssm_next_state (self->open_ssm);
 }
 
@@ -691,7 +691,7 @@ open_load_data (FpiSsm            *ssm,
       return;
     }
 
-  desc = validity_hal_device_lookup (self->dev_type);
+  desc = fpi_validity_hal_device_lookup (self->dev_type);
   if (!desc)
     {
       fpi_ssm_mark_failed (ssm,
@@ -699,12 +699,12 @@ open_load_data (FpiSsm            *ssm,
       return;
     }
 
-  validity_data_store_init (&self->device_data);
-  validity_data_store_init (&self->common_data);
+  fpi_validity_data_store_init (&self->device_data);
+  fpi_validity_data_store_init (&self->common_data);
 
   /* Load per-device blobs */
-  if (!validity_data_load_device (&self->device_data,
-                                  desc->vid, desc->pid, &error))
+  if (!fpi_validity_data_load_device (&self->device_data,
+                                      desc->vid, desc->pid, &error))
     {
       fpi_ssm_mark_failed (ssm, error);
       return;
@@ -716,25 +716,25 @@ open_load_data (FpiSsm            *ssm,
                                         &self->device_data);
 
   /* Load common data (partition sigs, CA cert, TLS keys, etc.) */
-  if (!validity_data_load_common (&self->common_data, &error))
+  if (!fpi_validity_data_load_common (&self->common_data, &error))
     {
       fpi_ssm_mark_failed (ssm, error);
       return;
     }
 
   /* Populate TLS state key pointers from common data store */
-  self->tls.password = validity_data_get_bytes (&self->common_data,
-                                                VALIDITY_DATA_TLS_PASSWORD,
-                                                &self->tls.password_len);
-  self->tls.gwk_sign = validity_data_get_bytes (&self->common_data,
-                                                VALIDITY_DATA_GWK_SIGN,
-                                                &self->tls.gwk_sign_len);
-  self->tls.fw_pubkey_x = validity_data_get_bytes (&self->common_data,
-                                                   VALIDITY_DATA_FW_PUBKEY_X,
-                                                   &self->tls.fw_pubkey_x_len);
-  self->tls.fw_pubkey_y = validity_data_get_bytes (&self->common_data,
-                                                   VALIDITY_DATA_FW_PUBKEY_Y,
-                                                   &self->tls.fw_pubkey_y_len);
+  self->tls.password = fpi_validity_data_get_bytes (&self->common_data,
+                                                    VALIDITY_DATA_TLS_PASSWORD,
+                                                    &self->tls.password_len);
+  self->tls.gwk_sign = fpi_validity_data_get_bytes (&self->common_data,
+                                                    VALIDITY_DATA_GWK_SIGN,
+                                                    &self->tls.gwk_sign_len);
+  self->tls.fw_pubkey_x = fpi_validity_data_get_bytes (&self->common_data,
+                                                       VALIDITY_DATA_FW_PUBKEY_X,
+                                                       &self->tls.fw_pubkey_x_len);
+  self->tls.fw_pubkey_y = fpi_validity_data_get_bytes (&self->common_data,
+                                                       VALIDITY_DATA_FW_PUBKEY_Y,
+                                                       &self->tls.fw_pubkey_y_len);
 
   fp_info ("Loaded external data files for %04x:%04x", desc->vid, desc->pid);
   fpi_ssm_next_state (ssm);
@@ -787,8 +787,8 @@ open_send_init_hardcoded (FpiSsm            *ssm,
       break;
     }
 
-  init_data = validity_data_get_bytes (&self->device_data,
-                                       VALIDITY_DATA_INIT, &init_len);
+  init_data = fpi_validity_data_get_bytes (&self->device_data,
+                                           VALIDITY_DATA_INIT, &init_len);
 
   if ((!init_data || init_len == 0) &&
       fpi_validity_device_policy (self->dev_type)->safety_gates)
@@ -864,9 +864,9 @@ open_send_init_clean_slate (FpiSsm            *ssm,
       return;
     }
 
-  cs_data = validity_data_get_bytes (&self->device_data,
-                                     VALIDITY_DATA_INIT_CLEAN_SLATE,
-                                     &cs_len);
+  cs_data = fpi_validity_data_get_bytes (&self->device_data,
+                                         VALIDITY_DATA_INIT_CLEAN_SLATE,
+                                         &cs_len);
 
   if (!cs_data || cs_len == 0)
     {
@@ -956,7 +956,7 @@ open_upload_fwext (FpiSsm            *ssm,
   fp_info ("Firmware extension not loaded — starting upload via TLS");
 
   self->open_ssm = ssm;
-  FpiSsm *fwext_ssm = validity_fwext_upload_ssm_new (dev);
+  FpiSsm *fwext_ssm = fpi_validity_fwext_upload_ssm_new (dev);
   fpi_ssm_start (fwext_ssm, fwext_upload_ssm_done);
 }
 
@@ -976,14 +976,14 @@ open_pair (FpiSsm            *ssm,
     }
 
   fp_info ("Starting pairing check…");
-  validity_pair_state_init (&self->pair_state);
+  fpi_validity_pair_state_init (&self->pair_state);
   /* The in-driver reconnect re-runs this sequence to restore a session with
    * a sensor that was working moments ago. It must never pair (pairing
    * erases flash): run the read-only check, and let the pair SSM refuse,
    * failing the reconnect, if pairing would be needed. */
   self->pair_state.check_only = self->in_recovery;
   self->open_ssm = ssm;
-  FpiSsm *pair_ssm = validity_pair_ssm_new (dev);
+  FpiSsm *pair_ssm = fpi_validity_pair_ssm_new (dev);
   fpi_ssm_start (pair_ssm, pair_ssm_done);
 }
 
@@ -1005,7 +1005,7 @@ open_tls_read_flash (FpiSsm            *ssm,
    * TLS works independently of fwext (partition 2). */
   self->open_ssm = ssm;
   FpiSsm *flash_ssm = fpi_ssm_new (dev,
-                                   validity_tls_flash_read_run_state,
+                                   fpi_validity_tls_flash_read_run_state,
                                    TLS_FLASH_READ_NUM_STATES);
   fpi_ssm_start (flash_ssm, flash_read_ssm_done);
 }
@@ -1018,7 +1018,7 @@ open_tls_derive_psk (FpiSsm            *ssm,
 
   /* Derive PSK from hardware identity (DMI). Only a developer build with
    * FP_VALIDITY_DMI_SERIAL_FILE set can fail here (fail closed). */
-  if (!validity_tls_derive_psk_checked (&self->tls, &error))
+  if (!fpi_validity_tls_derive_psk_checked (&self->tls, &error))
     {
       g_prefix_error (&error, "Developer DMI serial override: ");
       fpi_ssm_mark_failed (ssm, error);
@@ -1042,10 +1042,10 @@ open_tls_derive_psk (FpiSsm            *ssm,
       fp_dbg ("TLS flash: %u bytes of data (response had %zu)",
               flash_sz, self->cmd_response_len);
 
-      if (!validity_tls_parse_flash (&self->tls,
-                                     flash_data,
-                                     flash_sz,
-                                     &error))
+      if (!fpi_validity_tls_parse_flash (&self->tls,
+                                         flash_data,
+                                         flash_sz,
+                                         &error))
         {
           fp_warn ("TLS flash parse failed: %s", error->message);
           /* Keys wrapped under another host identity's PSK: never re-pair
@@ -1100,7 +1100,7 @@ open_tls_handshake (FpiSsm            *ssm,
 
   self->open_ssm = ssm;
   FpiSsm *tls_ssm = fpi_ssm_new (dev,
-                                 validity_tls_handshake_run_state,
+                                 fpi_validity_tls_handshake_run_state,
                                  TLS_HS_NUM_STATES);
   fpi_ssm_start (tls_ssm, tls_handshake_ssm_done);
 }
@@ -1123,7 +1123,7 @@ open_sensor_identify (FpiSsm            *ssm,
    * NULL callback: subsm auto-advances, response stashed in
    * self->cmd_response_data for the RECV state. */
   guint8 cmd[] = { VCSFW_CMD_IDENTIFY_SENSOR };
-  vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
 }
 
 static void
@@ -1146,9 +1146,9 @@ open_sensor_identify_recv (FpiSsm            *ssm,
     g_string_free (hex, TRUE);
   }
 
-  if (!validity_sensor_parse_identify (self->cmd_response_data,
-                                       self->cmd_response_len,
-                                       &self->sensor.ident))
+  if (!fpi_validity_sensor_parse_identify (self->cmd_response_data,
+                                           self->cmd_response_len,
+                                           &self->sensor.ident))
     {
       fp_warn ("identify_sensor: response too short");
       fpi_ssm_jump_to_state (ssm, OPEN_DONE);
@@ -1160,7 +1160,7 @@ open_sensor_identify_recv (FpiSsm            *ssm,
            self->sensor.ident.hw_version);
 
   /* Look up device info and sensor type */
-  self->sensor.device_info = validity_device_info_lookup (
+  self->sensor.device_info = fpi_validity_device_info_lookup (
     self->sensor.ident.hw_major,
     self->sensor.ident.hw_version);
 
@@ -1170,7 +1170,7 @@ open_sensor_identify_recv (FpiSsm            *ssm,
                self->sensor.device_info->name,
                self->sensor.device_info->type);
 
-      self->sensor.type_info = validity_sensor_type_info_lookup (
+      self->sensor.type_info = fpi_validity_sensor_type_info_lookup (
         self->sensor.device_info->type);
 
       /* Pick the true silicon type for the finger-down interrupt path, which
@@ -1232,8 +1232,8 @@ open_sensor_factory_bits (FpiSsm            *ssm,
 
   /* Build and send cmd 0x6f (GET_FACTORY_BITS) with tag 0x0e00 */
   guint8 cmd[9];
-  validity_sensor_build_factory_bits_cmd (0x0e00, cmd, sizeof (cmd));
-  vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+  fpi_validity_sensor_build_factory_bits_cmd (0x0e00, cmd, sizeof (cmd));
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
 }
 
 static void
@@ -1276,15 +1276,15 @@ open_capture_setup (FpiSsm            *ssm,
       return;
     }
 
-  validity_capture_state_init (&self->capture);
+  fpi_validity_capture_state_init (&self->capture);
 
-  if (!validity_capture_state_setup (&self->capture,
-                                     self->sensor.type_info,
-                                     self->sensor.device_info->type,
-                                     self->version_info.version_major,
-                                     self->version_info.version_minor,
-                                     self->sensor.factory_bits,
-                                     self->sensor.factory_bits_len))
+  if (!fpi_validity_capture_state_setup (&self->capture,
+                                         self->sensor.type_info,
+                                         self->sensor.device_info->type,
+                                         self->version_info.version_major,
+                                         self->version_info.version_minor,
+                                         self->sensor.factory_bits,
+                                         self->sensor.factory_bits_len))
     {
       fp_warn ("Capture state setup failed — "
                "enrollment/verification will not be available");
@@ -1360,10 +1360,10 @@ open_calibrate_send (FpiSsm            *ssm,
   gsize cmd_len;
   guint8 *cmd;
 
-  cmd = validity_capture_build_cmd_02 (&self->capture,
-                                       self->sensor.type_info,
-                                       VALIDITY_CAPTURE_CALIBRATE,
-                                       &cmd_len);
+  cmd = fpi_validity_capture_build_cmd_02 (&self->capture,
+                                           self->sensor.type_info,
+                                           VALIDITY_CAPTURE_CALIBRATE,
+                                           &cmd_len);
   if (!cmd)
     {
       fpi_ssm_mark_failed (ssm,
@@ -1377,7 +1377,7 @@ open_calibrate_send (FpiSsm            *ssm,
   fp_dbg ("Calibration iteration %u/%u",
           self->calib_iteration + 1,
           self->capture.calibration_iterations);
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1431,7 +1431,7 @@ open_calibrate_read_data (FpiSsm            *ssm,
     {
       /* Average the raw calibration frames */
       gsize averaged_len = 0;
-      guint8 *averaged = validity_capture_average_frames (
+      guint8 *averaged = fpi_validity_capture_average_frames (
         self->bulk_data,
         self->bulk_data_len,
         self->capture.lines_per_frame,
@@ -1443,7 +1443,7 @@ open_calibrate_read_data (FpiSsm            *ssm,
       if (averaged && averaged_len > 0)
         {
           /* Process calibration: scale and accumulate into calib_data */
-          validity_capture_process_calibration (
+          fpi_validity_capture_process_calibration (
             &self->capture.calib_data,
             &self->capture.calib_data_len,
             averaged,
@@ -1669,7 +1669,7 @@ open_ssm_done (FpiSsm   *ssm,
     {
       validity_release_state (self);
       g_usb_device_release_interface (fpi_device_get_usb_device (dev), 0, 0, NULL);
-      fpi_device_open_complete (dev, validity_map_removed_error (error));
+      fpi_device_open_complete (dev, fpi_validity_map_removed_error (error));
       return;
     }
 
@@ -1693,7 +1693,7 @@ open_ssm_done (FpiSsm   *ssm,
  * ================================================================ */
 
 gboolean
-validity_probe_alive (FpiDeviceValidity *self)
+fpi_validity_probe_alive (FpiDeviceValidity *self)
 {
   GUsbDevice *usb = fpi_device_get_usb_device (FP_DEVICE (self));
 
@@ -1738,9 +1738,9 @@ reconnect_ssm_done (FpiSsm   *ssm,
 }
 
 void
-validity_reconnect_start (FpiDeviceValidity  *self,
-                          ValidityReconnectCb cb,
-                          gpointer            user_data)
+fpi_validity_reconnect_start (FpiDeviceValidity  *self,
+                              ValidityReconnectCb cb,
+                              gpointer            user_data)
 {
   FpDevice *dev;
   GUsbDevice *usb;
@@ -1773,9 +1773,9 @@ validity_reconnect_start (FpiDeviceValidity  *self,
    * The open sequence started below reloads the data package, re-reads the
    * flash keys, re-runs the TLS handshake and recalibrates. */
   validity_release_state (self);
-  validity_tls_init (&self->tls);
-  validity_sensor_state_init (&self->sensor);
-  validity_capture_state_init (&self->capture);
+  fpi_validity_tls_init (&self->tls);
+  fpi_validity_sensor_state_init (&self->sensor);
+  fpi_validity_capture_state_init (&self->capture);
 
   /* Soft-reset and re-claim interface 0, mirroring dev_open. If the reset
   * caused a true re-enumeration the handle is dead and the claim fails --
@@ -1800,10 +1800,10 @@ validity_reconnect_start (FpiDeviceValidity  *self,
 }
 
 gboolean
-validity_recover_or_fail (FpiDeviceValidity  *self,
-                          const GError       *error,
-                          ValidityReconnectCb on_done,
-                          gpointer            user_data)
+fpi_validity_recover_or_fail (FpiDeviceValidity  *self,
+                              const GError       *error,
+                              ValidityReconnectCb on_done,
+                              gpointer            user_data)
 {
   ValidityErrClass klass;
   gboolean alive;
@@ -1822,8 +1822,8 @@ validity_recover_or_fail (FpiDeviceValidity  *self,
 
   /* Probe liveness: distinguishes a session-losing reset (device still on the
    * bus, recoverable) from a true re-enumeration (dead handle, not). */
-  alive = validity_probe_alive (self);
-  klass = validity_classify_error (error, alive);
+  alive = fpi_validity_probe_alive (self);
+  klass = fpi_validity_classify_error (error, alive);
 
   /* A chip that reset its TLS session surfaces as a generic PROTO error plus
    * the alert flag; treat that as a recoverable session loss if still alive. */
@@ -1835,7 +1835,7 @@ validity_recover_or_fail (FpiDeviceValidity  *self,
 
   fp_info ("Recoverable device reset mid-operation (%s) -- reconnecting",
            klass == VALIDITY_ERR_PIPE_STALL ? "pipe stall" : "session lost");
-  validity_reconnect_start (self, on_done, user_data);
+  fpi_validity_reconnect_start (self, on_done, user_data);
   return TRUE;
 }
 
@@ -1848,9 +1848,9 @@ dev_open (FpDevice *device)
 
   G_DEBUG_HERE ();
 
-  validity_tls_init (&self->tls);
-  validity_sensor_state_init (&self->sensor);
-  validity_capture_state_init (&self->capture);
+  fpi_validity_tls_init (&self->tls);
+  fpi_validity_sensor_state_init (&self->sensor);
+  fpi_validity_capture_state_init (&self->capture);
 
   /* Emulation mode: in-memory print store for virtual sensor */
   if (g_strcmp0 (g_getenv ("FP_DEVICE_EMULATION"), "1") == 0)
@@ -1866,7 +1866,7 @@ dev_open (FpDevice *device)
         {
           fp_dbg ("USB reset at open failed: %s", error->message);
           validity_release_state (self);
-          fpi_device_open_complete (device, validity_map_removed_error (error));
+          fpi_device_open_complete (device, fpi_validity_map_removed_error (error));
           return;
         }
       fp_dbg ("USB reset at open done");
@@ -1877,7 +1877,7 @@ dev_open (FpDevice *device)
   if (!g_usb_device_claim_interface (fpi_device_get_usb_device (device), 0, 0, &error))
     {
       validity_release_state (self);
-      fpi_device_open_complete (device, validity_map_removed_error (error));
+      fpi_device_open_complete (device, fpi_validity_map_removed_error (error));
       return;
     }
 
@@ -1906,15 +1906,15 @@ validity_release_state (FpiDeviceValidity *self)
   self->enroll_template_len = 0;
   g_clear_pointer (&self->bulk_data, g_free);
   self->bulk_data_len = 0;
-  validity_user_storage_clear (&self->list_storage);
-  validity_user_clear (&self->verify_match_user);
+  fpi_validity_user_storage_clear (&self->list_storage);
+  fpi_validity_user_clear (&self->verify_match_user);
 
-  validity_capture_state_clear (&self->capture);
-  validity_sensor_state_clear (&self->sensor);
-  validity_pair_state_free (&self->pair_state);
-  validity_tls_free (&self->tls);
-  validity_data_store_free (&self->device_data);
-  validity_data_store_free (&self->common_data);
+  fpi_validity_capture_state_clear (&self->capture);
+  fpi_validity_sensor_state_clear (&self->sensor);
+  fpi_validity_pair_state_free (&self->pair_state);
+  fpi_validity_tls_free (&self->tls);
+  fpi_validity_data_store_free (&self->device_data);
+  fpi_validity_data_store_free (&self->common_data);
 
   g_clear_pointer (&self->emulation_prints, g_ptr_array_unref);
 }
@@ -1960,16 +1960,16 @@ fpi_device_validity_class_init (FpiDeviceValidityClass *klass)
   dev_class->probe = dev_probe;
   dev_class->open = dev_open;
   dev_class->close = dev_close;
-  dev_class->enroll = validity_enroll;
-  dev_class->verify = validity_verify;
-  dev_class->identify = validity_identify;
-  dev_class->delete = validity_delete;
-  dev_class->list = validity_list;
-  dev_class->clear_storage = validity_clear_storage;
+  dev_class->enroll = fpi_validity_enroll;
+  dev_class->verify = fpi_validity_verify;
+  dev_class->identify = fpi_validity_identify;
+  dev_class->delete = fpi_validity_delete;
+  dev_class->list = fpi_validity_list;
+  dev_class->clear_storage = fpi_validity_clear_storage;
   /* Diagnostics in developer builds only (see fpi_validity_a2_capture());
    * probe keeps the feature off for every model whose policy does not
    * allow it */
-  if (validity_dev_overrides_built ())
+  if (fpi_validity_dev_overrides_built ())
     dev_class->capture = fpi_validity_a2_capture;
 
   fpi_device_class_auto_initialize_features (dev_class);

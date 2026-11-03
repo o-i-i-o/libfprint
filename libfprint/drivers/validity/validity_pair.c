@@ -51,13 +51,13 @@
  * ================================================================ */
 
 void
-validity_pair_state_init (ValidityPairState *state)
+fpi_validity_pair_state_init (ValidityPairState *state)
 {
   memset (state, 0, sizeof (*state));
 }
 
 void
-validity_pair_state_free (ValidityPairState *state)
+fpi_validity_pair_state_free (ValidityPairState *state)
 {
   g_clear_pointer (&state->client_key, EVP_PKEY_free);
   g_clear_pointer (&state->server_cert, g_free);
@@ -77,10 +77,10 @@ validity_pair_state_free (ValidityPairState *state)
 #define FLASH_INFO_HEADER_SIZE 14   /* 7 × guint16 */
 
 gboolean
-validity_pair_parse_flash_info (const guint8          *data,
-                                gsize                  data_len,
-                                ValidityFlashIcParams *ic_out,
-                                guint16               *num_partitions_out)
+fpi_validity_pair_parse_flash_info (const guint8          *data,
+                                    gsize                  data_len,
+                                    ValidityFlashIcParams *ic_out,
+                                    guint16               *num_partitions_out)
 {
   if (!data || data_len < FLASH_INFO_HEADER_SIZE)
     return FALSE;
@@ -126,9 +126,9 @@ validity_pair_parse_flash_info (const guint8          *data,
 #define TLS_FLASH_RESPONSE_HEADER_SIZE 6
 
 ValidityTlsFlashClass
-validity_pair_classify_tls_flash (guint16       status,
-                                  const guint8 *data,
-                                  gsize         len)
+fpi_validity_pair_classify_tls_flash (guint16       status,
+                                      const guint8 *data,
+                                      gsize         len)
 {
   FpiByteReader r;
   guint32 flash_sz = 0;
@@ -203,9 +203,9 @@ validity_pair_classify_tls_flash (guint16       status,
 }
 
 ValidityPairDecision
-validity_pair_decide (guint16               num_partitions,
-                      ValidityTlsFlashClass flash,
-                      gboolean              check_only)
+fpi_validity_pair_decide (guint16               num_partitions,
+                          ValidityTlsFlashClass flash,
+                          gboolean              check_only)
 {
   /* No partition table: by the firmware's own report there is no key store
    * and no template partition, so there is nothing on the sensor to lose.
@@ -237,13 +237,13 @@ validity_pair_decide (guint16               num_partitions,
 }
 
 ValidityPairDecision
-validity_pair_decide_for_policy (guint16               num_partitions,
-                                 ValidityTlsFlashClass flash,
-                                 gboolean              check_only,
-                                 gboolean              allow_provisioning)
+fpi_validity_pair_decide_for_policy (guint16               num_partitions,
+                                     ValidityTlsFlashClass flash,
+                                     gboolean              check_only,
+                                     gboolean              allow_provisioning)
 {
-  ValidityPairDecision decision = validity_pair_decide (num_partitions, flash,
-                                                        check_only);
+  ValidityPairDecision decision = fpi_validity_pair_decide (num_partitions, flash,
+                                                            check_only);
 
   /* PROVISION is only ever decided at 0 partitions; refuse that whole case
    * (also from a reconnect) for a type that is never provisioned. */
@@ -264,8 +264,8 @@ validity_pair_decide_for_policy (guint16               num_partitions,
  * ================================================================ */
 
 void
-validity_pair_serialize_partition (const ValidityPartition *part,
-                                   guint8                  *out)
+fpi_validity_pair_serialize_partition (const ValidityPartition *part,
+                                       guint8                  *out)
 {
   guint8 entry[12];
 
@@ -343,7 +343,7 @@ derive_hs_signing_key (const guint8 *password, gsize password_len)
   prf_seed[32] = 0xaa;
 
   /* PRF(key=password[0:16], seed=prf_seed, output_len=32) */
-  validity_tls_prf (key, 16, prf_seed, 33, hs_key_bytes, 32);
+  fpi_validity_tls_prf (key, 16, prf_seed, 33, hs_key_bytes, 32);
 
   /* Convert to big-endian scalar (python-validity does [::-1] reversal) */
   guint8 be_scalar[32];
@@ -415,11 +415,11 @@ derive_hs_signing_key (const guint8 *password, gsize password_len)
 #define CERT_BODY_SIZE 184
 
 guint8 *
-validity_pair_make_cert (const guint8 *client_public_x,
-                         const guint8 *client_public_y,
-                         const guint8 *password,
-                         gsize         password_len,
-                         gsize        *out_len)
+fpi_validity_pair_make_cert (const guint8 *client_public_x,
+                             const guint8 *client_public_y,
+                             const guint8 *password,
+                             gsize         password_len,
+                             gsize        *out_len)
 {
   guint8 body[CERT_BODY_SIZE];
 
@@ -483,12 +483,12 @@ validity_pair_make_cert (const guint8 *client_public_x,
  * ================================================================ */
 
 guint8 *
-validity_pair_encrypt_key (const guint8 *client_private,
-                           const guint8 *client_public_x,
-                           const guint8 *client_public_y,
-                           const guint8 *psk_encryption_key,
-                           const guint8 *psk_validation_key,
-                           gsize        *out_len)
+fpi_validity_pair_encrypt_key (const guint8 *client_private,
+                               const guint8 *client_public_x,
+                               const guint8 *client_public_y,
+                               const guint8 *psk_encryption_key,
+                               const guint8 *psk_validation_key,
+                               gsize        *out_len)
 {
   /* Build plaintext: x + y + d = 96 bytes */
   guint8 plaintext[96 + 16]; /* + max PKCS7 padding */
@@ -570,17 +570,17 @@ validity_pair_encrypt_key (const guint8 *client_private,
  * ================================================================ */
 
 guint8 *
-validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *flash_ic,
-                                         const ValidityFlashLayout   *layout,
-                                         const guint8                *partition_sig,
-                                         gsize                        partition_sig_len,
-                                         const guint8                *client_public_x,
-                                         const guint8                *client_public_y,
-                                         const guint8                *password,
-                                         gsize                        password_len,
-                                         const guint8                *ca_cert,
-                                         gsize                        ca_cert_len,
-                                         gsize                       *out_len)
+fpi_validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *flash_ic,
+                                             const ValidityFlashLayout   *layout,
+                                             const guint8                *partition_sig,
+                                             gsize                        partition_sig_len,
+                                             const guint8                *client_public_x,
+                                             const guint8                *client_public_y,
+                                             const guint8                *password,
+                                             gsize                        password_len,
+                                             const guint8                *ca_cert,
+                                             gsize                        ca_cert_len,
+                                             gsize                       *out_len)
 {
   /* Build flash IC params body (hdr 0) */
   guint8 ic_body[12];
@@ -599,8 +599,8 @@ validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *flash_ic,
   g_autofree guint8 *ptbl_body = g_malloc0 (ptbl_body_len);
 
   for (gsize i = 0; i < layout->num_partitions; i++)
-    validity_pair_serialize_partition (&layout->partitions[i],
-                                       ptbl_body + (i * VALIDITY_PARTITION_ENTRY_SIZE));
+    fpi_validity_pair_serialize_partition (&layout->partitions[i],
+                                           ptbl_body + (i * VALIDITY_PARTITION_ENTRY_SIZE));
   memcpy (ptbl_body + (layout->num_partitions * VALIDITY_PARTITION_ENTRY_SIZE),
           partition_sig, partition_sig_len);
 
@@ -611,10 +611,10 @@ validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *flash_ic,
 
   /* Build client certificate (hdr 5) */
   gsize cert_len;
-  g_autofree guint8 *cert = validity_pair_make_cert (client_public_x,
-                                                     client_public_y,
-                                                     password, password_len,
-                                                     &cert_len);
+  g_autofree guint8 *cert = fpi_validity_pair_make_cert (client_public_x,
+                                                         client_public_y,
+                                                         password, password_len,
+                                                         &cert_len);
   if (!cert)
     return NULL;
 
@@ -694,10 +694,10 @@ append_flash_block (guint8 *buf, gsize buf_size, gsize *offset, guint16 id,
 }
 
 guint8 *
-validity_pair_build_tls_flash (const ValidityPairState *state,
-                               const guint8            *ca_cert,
-                               gsize                    ca_cert_len,
-                               gsize                   *out_len)
+fpi_validity_pair_build_tls_flash (const ValidityPairState *state,
+                                   const guint8            *ca_cert,
+                                   gsize                    ca_cert_len,
+                                   gsize                   *out_len)
 {
   guint8 *buf = g_malloc (TLS_FLASH_IMAGE_SIZE);
 
@@ -868,7 +868,7 @@ pair_apply_decision (FpiSsm            *ssm,
     }
 
   /* Look up device descriptor */
-  ps->dev_desc = validity_hal_device_lookup (self->dev_type);
+  ps->dev_desc = fpi_validity_hal_device_lookup (self->dev_type);
   if (!ps->dev_desc)
     {
       fp_warn ("No HAL descriptor for dev_type=%u", self->dev_type);
@@ -897,10 +897,10 @@ pair_check_needed (FpiSsm            *ssm,
       return;
     }
 
-  if (!validity_pair_parse_flash_info (self->cmd_response_data,
-                                       self->cmd_response_len,
-                                       &ps->flash_ic,
-                                       &ps->num_partitions))
+  if (!fpi_validity_pair_parse_flash_info (self->cmd_response_data,
+                                           self->cmd_response_len,
+                                           &ps->flash_ic,
+                                           &ps->num_partitions))
     {
       fp_warn ("Failed to parse flash info");
       fpi_ssm_mark_failed (ssm,
@@ -918,7 +918,7 @@ pair_check_needed (FpiSsm            *ssm,
     }
 
   /* No partitions: partition 1 is not read, so decide straight away */
-  ps->decision = validity_pair_decide_for_policy (
+  ps->decision = fpi_validity_pair_decide_for_policy (
     0, VALIDITY_TLS_FLASH_UNREADABLE, ps->check_only,
     fpi_validity_device_policy (self->dev_type)->allow_provisioning);
   pair_apply_decision (ssm, self);
@@ -931,10 +931,10 @@ pair_verify_tls_recv (FpiSsm            *ssm,
   ValidityPairState *ps = &self->pair_state;
   ValidityTlsFlashClass flash;
 
-  flash = validity_pair_classify_tls_flash (self->cmd_response_status,
-                                            self->cmd_response_data,
-                                            self->cmd_response_len);
-  ps->decision = validity_pair_decide_for_policy (
+  flash = fpi_validity_pair_classify_tls_flash (self->cmd_response_status,
+                                                self->cmd_response_data,
+                                                self->cmd_response_len);
+  ps->decision = fpi_validity_pair_decide_for_policy (
     ps->num_partitions, flash, ps->check_only,
     fpi_validity_device_policy (self->dev_type)->allow_provisioning);
   pair_apply_decision (ssm, self);
@@ -959,8 +959,8 @@ pair_send_reset_blob (FpiSsm            *ssm,
     }
 
   /* Send reset_blob via raw USB (python-validity: usb.cmd(reset_blob)) */
-  reset_data = validity_data_get_bytes (&self->device_data,
-                                        VALIDITY_DATA_RESET, &reset_len);
+  reset_data = fpi_validity_data_get_bytes (&self->device_data,
+                                            VALIDITY_DATA_RESET, &reset_len);
   if (!reset_data || reset_len == 0)
     {
       fp_warn ("No reset_blob available for this device");
@@ -969,7 +969,7 @@ pair_send_reset_blob (FpiSsm            *ssm,
       return;
     }
 
-  vcsfw_cmd_send (self, ssm, reset_data, reset_len, NULL);
+  fpi_vcsfw_cmd_send (self, ssm, reset_data, reset_len, NULL);
 }
 
 static void
@@ -1036,14 +1036,14 @@ pair_partition_flash_send (FpiSsm            *ssm,
                             VALIDITY_DATA_PARTITION_SIG_0090 :
                             VALIDITY_DATA_PARTITION_SIG_STANDARD;
 
-  partition_sig_data = validity_data_get_bytes (&self->common_data,
-                                                sig_tag, &partition_sig_len);
-  password_data = validity_data_get_bytes (&self->common_data,
-                                           VALIDITY_DATA_TLS_PASSWORD,
-                                           &password_len);
-  ca_cert_data = validity_data_get_bytes (&self->common_data,
-                                          VALIDITY_DATA_CA_PUBKEY,
-                                          &ca_cert_len);
+  partition_sig_data = fpi_validity_data_get_bytes (&self->common_data,
+                                                    sig_tag, &partition_sig_len);
+  password_data = fpi_validity_data_get_bytes (&self->common_data,
+                                               VALIDITY_DATA_TLS_PASSWORD,
+                                               &password_len);
+  ca_cert_data = fpi_validity_data_get_bytes (&self->common_data,
+                                              VALIDITY_DATA_CA_PUBKEY,
+                                              &ca_cert_len);
 
   if (!partition_sig_data || !password_data || !ca_cert_data)
     {
@@ -1054,7 +1054,7 @@ pair_partition_flash_send (FpiSsm            *ssm,
     }
 
   gsize cmd_len;
-  g_autofree guint8 *cmd = validity_pair_build_partition_flash_cmd (
+  g_autofree guint8 *cmd = fpi_validity_pair_build_partition_flash_cmd (
     &ps->flash_ic,
     ps->dev_desc->flash_layout,
     partition_sig_data, partition_sig_len,
@@ -1077,7 +1077,7 @@ pair_partition_flash_send (FpiSsm            *ssm,
   /* NOTE: partition_flash is sent via raw USB (TLS not yet active).
    * python-validity sends it through tls.cmd() which falls back to
    * raw USB when secure_rx/secure_tx are false. */
-  vcsfw_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_cmd_send (self, ssm, cmd, cmd_len, NULL);
 }
 
 static void
@@ -1224,7 +1224,7 @@ pair_cmd50_process (FpiSsm            *ssm,
    * python-validity: tls.handle_priv(encrypt_key(client_private, client_public)) */
 
   /* First, derive PSK if not already done */
-  validity_tls_derive_psk (&self->tls);
+  fpi_validity_tls_derive_psk (&self->tls);
 
   /* Extract private key scalar (little-endian) */
   BIGNUM *priv_bn = NULL;
@@ -1256,10 +1256,10 @@ pair_cmd50_process (FpiSsm            *ssm,
     }
 
   gsize priv_blob_len;
-  ps->priv_blob = validity_pair_encrypt_key (priv_le, pub_x_le2, pub_y_le2,
-                                             self->tls.psk_encryption_key,
-                                             self->tls.psk_validation_key,
-                                             &priv_blob_len);
+  ps->priv_blob = fpi_validity_pair_encrypt_key (priv_le, pub_x_le2, pub_y_le2,
+                                                 self->tls.psk_encryption_key,
+                                                 self->tls.psk_validation_key,
+                                                 &priv_blob_len);
   ps->priv_blob_len = priv_blob_len;
 
   /* Also store in TLS state for handle_priv path */
@@ -1299,7 +1299,7 @@ pair_tls_handshake (FpiSsm            *ssm,
    * NOTE: do NOT overwrite self->open_ssm here — it must remain
    * pointing to the open SSM for pair_ssm_done to work. */
   FpiSsm *tls_ssm = fpi_ssm_new (dev,
-                                 validity_tls_handshake_run_state,
+                                 fpi_validity_tls_handshake_run_state,
                                  TLS_HS_NUM_STATES);
 
   fpi_ssm_start_subsm (ssm, tls_ssm);
@@ -1323,16 +1323,16 @@ pair_erase_dbe_send (FpiSsm            *ssm,
            (guint) VALIDITY_PAIR_NUM_ERASE_STEPS);
 
   gsize dbe_len;
-  const guint8 *dbe_data = validity_data_get_bytes (&self->device_data,
-                                                    VALIDITY_DATA_DB_WRITE_ENABLE,
-                                                    &dbe_len);
+  const guint8 *dbe_data = fpi_validity_data_get_bytes (&self->device_data,
+                                                        VALIDITY_DATA_DB_WRITE_ENABLE,
+                                                        &dbe_len);
   if (!dbe_data || dbe_len == 0)
     {
       fpi_ssm_mark_failed (ssm,
                            fpi_device_error_new (FP_DEVICE_ERROR_DATA_NOT_FOUND));
       return;
     }
-  vcsfw_tls_cmd_send (self, ssm, dbe_data, dbe_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, dbe_data, dbe_len, NULL);
 }
 
 static void
@@ -1360,9 +1360,9 @@ pair_write_dbe_send (FpiSsm            *ssm,
 {
   /* db_write_enable before write_flash */
   gsize dbe_len;
-  const guint8 *dbe_data = validity_data_get_bytes (&self->device_data,
-                                                    VALIDITY_DATA_DB_WRITE_ENABLE,
-                                                    &dbe_len);
+  const guint8 *dbe_data = fpi_validity_data_get_bytes (&self->device_data,
+                                                        VALIDITY_DATA_DB_WRITE_ENABLE,
+                                                        &dbe_len);
 
   if (!dbe_data || dbe_len == 0)
     {
@@ -1371,7 +1371,7 @@ pair_write_dbe_send (FpiSsm            *ssm,
                            fpi_device_error_new (FP_DEVICE_ERROR_DATA_NOT_FOUND));
       return;
     }
-  vcsfw_tls_cmd_send (self, ssm, dbe_data, dbe_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, dbe_data, dbe_len, NULL);
 }
 
 static void
@@ -1382,12 +1382,12 @@ pair_write_flash_send (FpiSsm            *ssm,
 
   /* Build TLS flash image */
   gsize ca_len;
-  const guint8 *ca_data = validity_data_get_bytes (&self->common_data,
-                                                   VALIDITY_DATA_CA_PUBKEY,
-                                                   &ca_len);
+  const guint8 *ca_data = fpi_validity_data_get_bytes (&self->common_data,
+                                                       VALIDITY_DATA_CA_PUBKEY,
+                                                       &ca_len);
   gsize flash_len;
   g_autofree guint8 *flash_data =
-    validity_pair_build_tls_flash (ps, ca_data, ca_len, &flash_len);
+    fpi_validity_pair_build_tls_flash (ps, ca_data, ca_len, &flash_len);
 
   if (!flash_data)
     {
@@ -1412,7 +1412,7 @@ pair_write_flash_send (FpiSsm            *ssm,
 
   fp_info ("Writing TLS flash: %" G_GSIZE_FORMAT " bytes to partition 1",
            flash_len);
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1429,12 +1429,12 @@ pair_reboot_send (FpiSsm            *ssm,
   guint8 cmd[] = { VCSFW_CMD_REBOOT, 0x02, 0x00 };
 
   ps->reboot_pending = TRUE;
-  vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+  fpi_vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
 }
 
 void
-validity_pair_run_state (FpiSsm   *ssm,
-                         FpDevice *dev)
+fpi_validity_pair_run_state (FpiSsm   *ssm,
+                             FpDevice *dev)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
 
@@ -1443,7 +1443,7 @@ validity_pair_run_state (FpiSsm   *ssm,
     case PAIR_GET_FLASH_INFO:
       {
         guint8 cmd[] = { VCSFW_CMD_GET_FLASH_INFO };
-        vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1467,7 +1467,7 @@ validity_pair_run_state (FpiSsm   *ssm,
                        (guint16) 0x0000,
                        (guint32) 0x0000,
                        (guint32) 0x1000);
-        vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1506,7 +1506,7 @@ validity_pair_run_state (FpiSsm   *ssm,
     case PAIR_CMD50_SEND:
       {
         guint8 cmd[] = { VCSFW_CMD_GET_ECDH };
-        vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1529,7 +1529,7 @@ validity_pair_run_state (FpiSsm   *ssm,
     case PAIR_CLEANUPS_SEND:
       {
         guint8 cmd[] = { VCSFW_CMD_CLEANUPS };
-        vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1564,7 +1564,7 @@ validity_pair_run_state (FpiSsm   *ssm,
         validity_pack (cmd, sizeof (cmd), "bb",
                        VCSFW_CMD_ERASE_FLASH,
                        pair_erase_partition_ids[ps->erase_step]);
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1582,7 +1582,7 @@ validity_pair_run_state (FpiSsm   *ssm,
     case PAIR_ERASE_CLEAN_SEND:
       {
         guint8 cmd[] = { VCSFW_CMD_CLEANUPS };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1627,7 +1627,7 @@ validity_pair_run_state (FpiSsm   *ssm,
     case PAIR_WRITE_CLEAN_SEND:
       {
         guint8 cmd[] = { VCSFW_CMD_CLEANUPS };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
         break;
       }
 
@@ -1655,7 +1655,7 @@ validity_pair_run_state (FpiSsm   *ssm,
 }
 
 FpiSsm *
-validity_pair_ssm_new (FpDevice *dev)
+fpi_validity_pair_ssm_new (FpDevice *dev)
 {
-  return fpi_ssm_new (dev, validity_pair_run_state, PAIR_NUM_STATES);
+  return fpi_ssm_new (dev, fpi_validity_pair_run_state, PAIR_NUM_STATES);
 }

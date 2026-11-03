@@ -45,12 +45,12 @@
  * ================================================================ */
 
 void
-validity_tls_prf (const guint8 *secret,
-                  gsize         secret_len,
-                  const guint8 *seed,
-                  gsize         seed_len,
-                  guint8       *output,
-                  gsize         output_len)
+fpi_validity_tls_prf (const guint8 *secret,
+                      gsize         secret_len,
+                      const guint8 *seed,
+                      gsize         seed_len,
+                      guint8       *output,
+                      gsize         output_len)
 {
   guint n = (output_len + 31) / 32;
   guint8 a[32];         /* A(i) */
@@ -105,13 +105,13 @@ validity_tls_prf (const guint8 *secret,
  * ================================================================ */
 
 void
-validity_tls_init (ValidityTlsState *tls)
+fpi_validity_tls_init (ValidityTlsState *tls)
 {
   memset (tls, 0, sizeof (ValidityTlsState));
 }
 
 void
-validity_tls_free (ValidityTlsState *tls)
+fpi_validity_tls_free (ValidityTlsState *tls)
 {
   OPENSSL_cleanse (tls->sign_key, sizeof (tls->sign_key));
   OPENSSL_cleanse (tls->validation_key, sizeof (tls->validation_key));
@@ -175,9 +175,9 @@ validity_tls_free (ValidityTlsState *tls)
  * ================================================================ */
 
 void
-validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
-                                       const gchar      *product_name,
-                                       const gchar      *product_serial)
+fpi_validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
+                                           const gchar      *product_name,
+                                           const gchar      *product_serial)
 {
   /* hw_key = product_name + '\0' + serial_number + '\0' */
   gsize name_len = strlen (product_name);
@@ -195,16 +195,16 @@ validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
   g_autofree guint8 *seed = g_malloc (seed_len);
   memcpy (seed, "GWK", 3);
   memcpy (seed + 3, hw_key, hw_key_len);
-  validity_tls_prf (tls->password, tls->password_len, seed, seed_len,
-                    tls->psk_encryption_key, 32);
+  fpi_validity_tls_prf (tls->password, tls->password_len, seed, seed_len,
+                        tls->psk_encryption_key, 32);
 
   /* psk_validation_key = PRF(psk_encryption_key, "GWK_SIGN" || gwk_sign, 0x20) */
   gsize seed2_len = 8 + tls->gwk_sign_len;
   g_autofree guint8 *seed2 = g_malloc (seed2_len);
   memcpy (seed2, "GWK_SIGN", 8);
   memcpy (seed2 + 8, tls->gwk_sign, tls->gwk_sign_len);
-  validity_tls_prf (tls->psk_encryption_key, 32, seed2, seed2_len,
-                    tls->psk_validation_key, 32);
+  fpi_validity_tls_prf (tls->psk_encryption_key, 32, seed2, seed2_len,
+                        tls->psk_validation_key, 32);
 
   /* With the public password and gwk_sign, these are enough to
    * recompute the PSK. */
@@ -213,9 +213,9 @@ validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
 }
 
 void
-validity_tls_derive_psk_from_files (ValidityTlsState *tls,
-                                    const gchar      *name_path,
-                                    const gchar      *serial_path)
+fpi_validity_tls_derive_psk_from_files (ValidityTlsState *tls,
+                                        const gchar      *name_path,
+                                        const gchar      *serial_path)
 {
   g_autofree gchar *product_name = NULL;
   g_autofree gchar *product_serial = NULL;
@@ -234,14 +234,14 @@ validity_tls_derive_psk_from_files (ValidityTlsState *tls,
                "python-validity's fallback identity \"VirtualBox\"/\"0\". "
                "A sensor paired under this machine's real identity cannot "
                "set up its TLS session.", error->message);
-      validity_tls_derive_psk_from_identity (tls, "VirtualBox", "0");
+      fpi_validity_tls_derive_psk_from_identity (tls, "VirtualBox", "0");
       return;
     }
 
   g_strstrip (product_name);
   g_strstrip (product_serial);
 
-  validity_tls_derive_psk_from_identity (tls, product_name, product_serial);
+  fpi_validity_tls_derive_psk_from_identity (tls, product_name, product_serial);
 
   /* Never log the serial itself, only whether there is one. */
   fp_info ("PSK derived from DMI: product=\"%s\", serial %s",
@@ -251,11 +251,11 @@ validity_tls_derive_psk_from_files (ValidityTlsState *tls,
 }
 
 void
-validity_tls_derive_psk (ValidityTlsState *tls)
+fpi_validity_tls_derive_psk (ValidityTlsState *tls)
 {
-  validity_tls_derive_psk_from_files (tls,
-                                      "/sys/class/dmi/id/product_name",
-                                      "/sys/class/dmi/id/product_serial");
+  fpi_validity_tls_derive_psk_from_files (tls,
+                                          "/sys/class/dmi/id/product_name",
+                                          "/sys/class/dmi/id/product_serial");
 }
 
 /* ================================================================
@@ -271,7 +271,7 @@ validity_tls_derive_psk (ValidityTlsState *tls)
 #define SERIAL_FILE_MAX_SIZE 256
 
 const gchar *
-validity_tls_dev_serial_file (void)
+fpi_validity_tls_dev_serial_file (void)
 {
 #if VALIDITY_DEV_OVERRIDES
   return g_getenv (VALIDITY_DMI_SERIAL_FILE_ENV);
@@ -281,7 +281,7 @@ validity_tls_dev_serial_file (void)
 }
 
 void
-validity_tls_free_secret_string (gchar *secret)
+fpi_validity_tls_free_secret_string (gchar *secret)
 {
   if (secret == NULL)
     return;
@@ -305,9 +305,9 @@ free_secret_buffer (gchar *secret,
 }
 
 gboolean
-validity_tls_read_serial_file (const gchar *path,
-                               gchar      **serial_out,
-                               GError     **error)
+fpi_validity_tls_read_serial_file (const gchar *path,
+                                   gchar      **serial_out,
+                                   GError     **error)
 {
   guint8 buf[SERIAL_FILE_MAX_SIZE + 1];
   struct stat st;
@@ -409,7 +409,7 @@ validity_tls_read_serial_file (const gchar *path,
 
   if (*serial == '\0')
     {
-      validity_tls_free_secret_string (serial);
+      fpi_validity_tls_free_secret_string (serial);
       g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
                    "DMI serial file %s is empty", path);
       return FALSE;
@@ -419,7 +419,7 @@ validity_tls_read_serial_file (const gchar *path,
     {
       if (*c < 0x20 || *c > 0x7e)
         {
-          validity_tls_free_secret_string (serial);
+          fpi_validity_tls_free_secret_string (serial);
           g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
                        "DMI serial file %s must hold one line of printable "
                        "ASCII", path);
@@ -432,10 +432,10 @@ validity_tls_read_serial_file (const gchar *path,
 }
 
 gboolean
-validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
-                                          const gchar      *name_path,
-                                          const gchar      *serial_path,
-                                          GError          **error)
+fpi_validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
+                                              const gchar      *name_path,
+                                              const gchar      *serial_path,
+                                              GError          **error)
 {
   g_autofree gchar *product_name = NULL;
   gchar *serial = NULL;
@@ -451,11 +451,11 @@ validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
     }
   g_strstrip (product_name);
 
-  if (!validity_tls_read_serial_file (serial_path, &serial, error))
+  if (!fpi_validity_tls_read_serial_file (serial_path, &serial, error))
     return FALSE;
 
-  validity_tls_derive_psk_from_identity (tls, product_name, serial);
-  validity_tls_free_secret_string (serial);
+  fpi_validity_tls_derive_psk_from_identity (tls, product_name, serial);
+  fpi_validity_tls_free_secret_string (serial);
 
   /* Never log the serial itself */
   fp_info ("PSK derived from DMI: product=\"%s\", serial from the developer "
@@ -464,17 +464,17 @@ validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
 }
 
 gboolean
-validity_tls_derive_psk_checked (ValidityTlsState *tls,
-                                 GError          **error)
+fpi_validity_tls_derive_psk_checked (ValidityTlsState *tls,
+                                     GError          **error)
 {
-  const gchar *serial_file = validity_tls_dev_serial_file ();
+  const gchar *serial_file = fpi_validity_tls_dev_serial_file ();
 
   if (serial_file != NULL)
-    return validity_tls_derive_psk_with_serial_file (tls,
-                                                     "/sys/class/dmi/id/product_name",
-                                                     serial_file, error);
+    return fpi_validity_tls_derive_psk_with_serial_file (tls,
+                                                         "/sys/class/dmi/id/product_name",
+                                                         serial_file, error);
 
-  validity_tls_derive_psk (tls);
+  fpi_validity_tls_derive_psk (tls);
   return TRUE;
 }
 
@@ -585,10 +585,10 @@ tls_hmac_validate (const guint8 *key, guint8 content_type,
  * ================================================================ */
 
 guint8 *
-validity_tls_encrypt (ValidityTlsState *tls,
-                      const guint8     *plaintext,
-                      gsize             plaintext_len,
-                      gsize            *out_len)
+fpi_validity_tls_encrypt (ValidityTlsState *tls,
+                          const guint8     *plaintext,
+                          gsize             plaintext_len,
+                          gsize            *out_len)
 {
   g_autofree guint8 *padded = NULL;
   gsize padded_len;
@@ -616,11 +616,11 @@ validity_tls_encrypt (ValidityTlsState *tls,
 }
 
 guint8 *
-validity_tls_decrypt (ValidityTlsState *tls,
-                      const guint8     *ciphertext,
-                      gsize             ciphertext_len,
-                      gsize            *out_len,
-                      GError          **error)
+fpi_validity_tls_decrypt (ValidityTlsState *tls,
+                          const guint8     *ciphertext,
+                          gsize             ciphertext_len,
+                          gsize            *out_len,
+                          GError          **error)
 {
   if (!ciphertext || ciphertext_len < TLS_IV_SIZE + TLS_AES_BLOCK_SIZE)
     {
@@ -677,10 +677,10 @@ validity_tls_decrypt (ValidityTlsState *tls,
  * ================================================================ */
 
 guint8 *
-validity_tls_wrap_app_data (ValidityTlsState *tls,
-                            const guint8     *cmd,
-                            gsize             cmd_len,
-                            gsize            *out_len)
+fpi_validity_tls_wrap_app_data (ValidityTlsState *tls,
+                                const guint8     *cmd,
+                                gsize             cmd_len,
+                                gsize            *out_len)
 {
   /* Sign: plaintext || HMAC(sign_key, hdr || plaintext) */
   gsize signed_len = cmd_len + TLS_HMAC_SIZE;
@@ -692,8 +692,8 @@ validity_tls_wrap_app_data (ValidityTlsState *tls,
 
   /* Encrypt */
   gsize enc_len;
-  guint8 *encrypted = validity_tls_encrypt (tls, signed_data, signed_len,
-                                            &enc_len);
+  guint8 *encrypted = fpi_validity_tls_encrypt (tls, signed_data, signed_len,
+                                                &enc_len);
   g_free (signed_data);
 
   /* Wrap in TLS record: type(1) || version(2) || length(2) || encrypted */
@@ -709,11 +709,11 @@ validity_tls_wrap_app_data (ValidityTlsState *tls,
 }
 
 guint8 *
-validity_tls_unwrap_response (ValidityTlsState *tls,
-                              const guint8     *response,
-                              gsize             response_len,
-                              gsize            *out_len,
-                              GError          **error)
+fpi_validity_tls_unwrap_response (ValidityTlsState *tls,
+                                  const guint8     *response,
+                                  gsize             response_len,
+                                  gsize            *out_len,
+                                  GError          **error)
 {
   GByteArray *app_data = g_byte_array_new ();
   FpiByteReader r;
@@ -785,8 +785,8 @@ validity_tls_unwrap_response (ValidityTlsState *tls,
 
           /* Decrypt */
           gsize dec_len;
-          guint8 *decrypted = validity_tls_decrypt (tls, rec_data, rec_len,
-                                                    &dec_len, error);
+          guint8 *decrypted = fpi_validity_tls_decrypt (tls, rec_data, rec_len,
+                                                        &dec_len, error);
           if (!decrypted)
             {
               g_byte_array_free (app_data, TRUE);
@@ -1179,10 +1179,10 @@ handle_cert_block (ValidityTlsState *tls,
 }
 
 gboolean
-validity_tls_parse_flash (ValidityTlsState *tls,
-                          const guint8     *data,
-                          gsize             data_len,
-                          GError          **error)
+fpi_validity_tls_parse_flash (ValidityTlsState *tls,
+                              const guint8     *data,
+                              gsize             data_len,
+                              GError          **error)
 {
   FpiByteReader r;
 
@@ -1308,7 +1308,7 @@ hs_append_msg (GByteArray *buf, GChecksum *hash,
 
 /* Build ClientHello */
 guint8 *
-validity_tls_build_client_hello (ValidityTlsState *tls, gsize *out_len)
+fpi_validity_tls_build_client_hello (ValidityTlsState *tls, gsize *out_len)
 {
   /* Reset handshake state */
   g_clear_pointer (&tls->handshake_hash, g_checksum_free);
@@ -1388,10 +1388,10 @@ validity_tls_build_client_hello (ValidityTlsState *tls, gsize *out_len)
 
 /* Parse ServerHello response */
 gboolean
-validity_tls_parse_server_hello (ValidityTlsState *tls,
-                                 const guint8     *data,
-                                 gsize             data_len,
-                                 GError          **error)
+fpi_validity_tls_parse_server_hello (ValidityTlsState *tls,
+                                     const guint8     *data,
+                                     gsize             data_len,
+                                     GError          **error)
 {
   FpiByteReader r;
 
@@ -1559,7 +1559,7 @@ get_ec_pubpoint_bytes (EVP_PKEY *pkey, guint8 *out, gsize out_len)
 /* Build client finish message (Certificate + KeyExchange + CertVerify +
  * ChangeCipherSpec + Finished) */
 guint8 *
-validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
+fpi_validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
 {
   GByteArray *output = g_byte_array_new ();
 
@@ -1620,17 +1620,17 @@ validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
   g_autofree guint8 *ms_seed = g_malloc (ms_seed_len);
   memcpy (ms_seed, "master secret", 13);
   memcpy (ms_seed + 13, seed, sizeof (seed));
-  validity_tls_prf (pre_master_secret, pms_len, ms_seed, ms_seed_len,
-                    tls->master_secret, TLS_MASTER_SECRET_SIZE);
+  fpi_validity_tls_prf (pre_master_secret, pms_len, ms_seed, ms_seed_len,
+                        tls->master_secret, TLS_MASTER_SECRET_SIZE);
 
   gsize ke_seed_len = 13 + sizeof (seed);  /* "key expansion" + randoms */
   g_autofree guint8 *ke_seed = g_malloc (ke_seed_len);
   memcpy (ke_seed, "key expansion", 13);
   memcpy (ke_seed + 13, seed, sizeof (seed));
   guint8 key_block[TLS_KEY_BLOCK_SIZE];
-  validity_tls_prf (tls->master_secret, TLS_MASTER_SECRET_SIZE,
-                    ke_seed, ke_seed_len,
-                    key_block, TLS_KEY_BLOCK_SIZE);
+  fpi_validity_tls_prf (tls->master_secret, TLS_MASTER_SECRET_SIZE,
+                        ke_seed, ke_seed_len,
+                        key_block, TLS_KEY_BLOCK_SIZE);
 
   memcpy (tls->sign_key, key_block, TLS_AES_KEY_SIZE);
   memcpy (tls->validation_key, key_block + 0x20, TLS_AES_KEY_SIZE);
@@ -1800,9 +1800,9 @@ validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
   g_autofree guint8 *vd_seed = g_malloc (vd_seed_len);
   memcpy (vd_seed, "client finished", 15);
   memcpy (vd_seed + 15, hs_hash, 32);
-  validity_tls_prf (tls->master_secret, TLS_MASTER_SECRET_SIZE,
-                    vd_seed, vd_seed_len,
-                    verify_data, TLS_VERIFY_DATA_SIZE);
+  fpi_validity_tls_prf (tls->master_secret, TLS_MASTER_SECRET_SIZE,
+                        vd_seed, vd_seed_len,
+                        verify_data, TLS_VERIFY_DATA_SIZE);
 
   {
     GString *hex = g_string_new ("TLS Finished hs_hash: ");
@@ -1835,8 +1835,8 @@ validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
                  signed_data + sizeof (fin_msg));
 
   gsize enc_len;
-  guint8 *encrypted = validity_tls_encrypt (tls, signed_data, signed_len,
-                                            &enc_len);
+  guint8 *encrypted = fpi_validity_tls_encrypt (tls, signed_data, signed_len,
+                                                &enc_len);
   g_free (signed_data);
 
   /* Wrap encrypted Finished in TLS handshake record */
@@ -1864,10 +1864,10 @@ validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
 
 /* Parse server ChangeCipherSpec + Finished response */
 gboolean
-validity_tls_parse_server_finish (ValidityTlsState *tls,
-                                  const guint8     *data,
-                                  gsize             data_len,
-                                  GError          **error)
+fpi_validity_tls_parse_server_finish (ValidityTlsState *tls,
+                                      const guint8     *data,
+                                      gsize             data_len,
+                                      GError          **error)
 {
   FpiByteReader r;
 
@@ -1915,8 +1915,8 @@ validity_tls_parse_server_finish (ValidityTlsState *tls,
 
           /* Decrypt */
           gsize dec_len;
-          guint8 *decrypted = validity_tls_decrypt (tls, rec_data, rec_len,
-                                                    &dec_len, error);
+          guint8 *decrypted = fpi_validity_tls_decrypt (tls, rec_data, rec_len,
+                                                        &dec_len, error);
           if (!decrypted)
             return FALSE;
 
@@ -1985,9 +1985,9 @@ validity_tls_parse_server_finish (ValidityTlsState *tls,
           g_autofree guint8 *sf_seed = g_malloc (sf_seed_len);
           memcpy (sf_seed, "server finished", 15);
           memcpy (sf_seed + 15, hs_hash, 32);
-          validity_tls_prf (tls->master_secret, TLS_MASTER_SECRET_SIZE,
-                            sf_seed, sf_seed_len,
-                            expected_vd, TLS_VERIFY_DATA_SIZE);
+          fpi_validity_tls_prf (tls->master_secret, TLS_MASTER_SECRET_SIZE,
+                                sf_seed, sf_seed_len,
+                                expected_vd, TLS_VERIFY_DATA_SIZE);
 
           {
             GString *hex = g_string_new ("TLS ServerFinished hs_hash: ");
@@ -2050,12 +2050,12 @@ tls_flash_read_cmd (FpiSsm            *ssm,
                  (guint16) 0,    /* reserved */
                  (guint32) 0,    /* offset */
                  (guint32) 0x1000);  /* size */
-  vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+  fpi_vcsfw_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
 }
 
 void
-validity_tls_flash_read_run_state (FpiSsm   *ssm,
-                                   FpDevice *dev)
+fpi_validity_tls_flash_read_run_state (FpiSsm   *ssm,
+                                       FpDevice *dev)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
 
@@ -2152,7 +2152,7 @@ tls_hs_send_client_hello (FpiSsm            *ssm,
   FpiUsbTransfer *transfer;
 
   gsize cmd_len;
-  guint8 *cmd = validity_tls_build_client_hello (&self->tls, &cmd_len);
+  guint8 *cmd = fpi_validity_tls_build_client_hello (&self->tls, &cmd_len);
 
   transfer = fpi_usb_transfer_new (dev);
   transfer->short_is_error = TRUE;
@@ -2198,10 +2198,10 @@ tls_hs_send_client_finish (FpiSsm            *ssm,
       return;
     }
 
-  if (!validity_tls_parse_server_hello (&self->tls,
-                                        self->cmd_response_data,
-                                        self->cmd_response_len,
-                                        &error))
+  if (!fpi_validity_tls_parse_server_hello (&self->tls,
+                                            self->cmd_response_data,
+                                            self->cmd_response_len,
+                                            &error))
     {
       fpi_ssm_mark_failed (ssm, error);
       return;
@@ -2209,7 +2209,7 @@ tls_hs_send_client_finish (FpiSsm            *ssm,
 
   /* Build and send Certificate + KeyExchange + CertVerify + CCS + Finished */
   gsize cmd_len;
-  guint8 *cmd = validity_tls_build_client_finish (&self->tls, &cmd_len);
+  guint8 *cmd = fpi_validity_tls_build_client_finish (&self->tls, &cmd_len);
 
   transfer = fpi_usb_transfer_new (dev);
   transfer->short_is_error = TRUE;
@@ -2251,10 +2251,10 @@ tls_hs_parse_server_finish (FpiSsm            *ssm,
       return;
     }
 
-  if (!validity_tls_parse_server_finish (&self->tls,
-                                         self->cmd_response_data,
-                                         self->cmd_response_len,
-                                         &error))
+  if (!fpi_validity_tls_parse_server_finish (&self->tls,
+                                             self->cmd_response_data,
+                                             self->cmd_response_len,
+                                             &error))
     {
       fpi_ssm_mark_failed (ssm, error);
       return;
@@ -2266,8 +2266,8 @@ tls_hs_parse_server_finish (FpiSsm            *ssm,
 }
 
 void
-validity_tls_handshake_run_state (FpiSsm   *ssm,
-                                  FpDevice *dev)
+fpi_validity_tls_handshake_run_state (FpiSsm   *ssm,
+                                      FpDevice *dev)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
 

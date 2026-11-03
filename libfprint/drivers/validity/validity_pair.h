@@ -136,8 +136,8 @@ static const guint8 pair_erase_partition_ids[] = { 1, 2, 5, 6, 4 };
  * Serialize a partition entry to binary format:
  *   [id:1][type:1][access_lvl:2LE][offset:4LE][size:4LE][zeros:4][SHA256:32]
  */
-void validity_pair_serialize_partition (const ValidityPartition *part,
-                                        guint8                  *out);
+void fpi_validity_pair_serialize_partition (const ValidityPartition *part,
+                                            guint8                  *out);
 
 /**
  * validity_pair_build_partition_flash_cmd:
@@ -156,17 +156,17 @@ void validity_pair_serialize_partition (const ValidityPartition *part,
  *
  * Returns: newly allocated command buffer, free with g_free().
  */
-guint8 *validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *flash_ic,
-                                                 const ValidityFlashLayout   *layout,
-                                                 const guint8                *partition_sig,
-                                                 gsize                        partition_sig_len,
-                                                 const guint8                *client_public_x,
-                                                 const guint8                *client_public_y,
-                                                 const guint8                *password,
-                                                 gsize                        password_len,
-                                                 const guint8                *ca_cert,
-                                                 gsize                        ca_cert_len,
-                                                 gsize                       *out_len);
+guint8 *fpi_validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *flash_ic,
+                                                     const ValidityFlashLayout   *layout,
+                                                     const guint8                *partition_sig,
+                                                     gsize                        partition_sig_len,
+                                                     const guint8                *client_public_x,
+                                                     const guint8                *client_public_y,
+                                                     const guint8                *password,
+                                                     gsize                        password_len,
+                                                     const guint8                *ca_cert,
+                                                     gsize                        ca_cert_len,
+                                                     gsize                       *out_len);
 
 /**
  * validity_pair_make_cert:
@@ -179,11 +179,11 @@ guint8 *validity_pair_build_partition_flash_cmd (const ValidityFlashIcParams *fl
  *
  * Returns: newly allocated cert buffer, or NULL on error. Free with g_free().
  */
-guint8 *validity_pair_make_cert (const guint8 *client_public_x,
-                                 const guint8 *client_public_y,
-                                 const guint8 *password,
-                                 gsize         password_len,
-                                 gsize        *out_len);
+guint8 *fpi_validity_pair_make_cert (const guint8 *client_public_x,
+                                     const guint8 *client_public_y,
+                                     const guint8 *password,
+                                     gsize         password_len,
+                                     gsize        *out_len);
 
 /**
  * validity_pair_encrypt_key:
@@ -201,12 +201,12 @@ guint8 *validity_pair_make_cert (const guint8 *client_public_x,
  *
  * Returns: newly allocated blob, or NULL on error. Free with g_free().
  */
-guint8 *validity_pair_encrypt_key (const guint8 *client_private,
-                                   const guint8 *client_public_x,
-                                   const guint8 *client_public_y,
-                                   const guint8 *psk_encryption_key,
-                                   const guint8 *psk_validation_key,
-                                   gsize        *out_len);
+guint8 *fpi_validity_pair_encrypt_key (const guint8 *client_private,
+                                       const guint8 *client_public_x,
+                                       const guint8 *client_public_y,
+                                       const guint8 *psk_encryption_key,
+                                       const guint8 *psk_validation_key,
+                                       gsize        *out_len);
 
 /**
  * validity_pair_parse_flash_info:
@@ -220,10 +220,10 @@ guint8 *validity_pair_encrypt_key (const guint8 *client_private,
  *
  * Returns: TRUE on success, FALSE on parse error.
  */
-gboolean validity_pair_parse_flash_info (const guint8          *data,
-                                         gsize                  data_len,
-                                         ValidityFlashIcParams *ic_out,
-                                         guint16               *num_partitions_out);
+gboolean fpi_validity_pair_parse_flash_info (const guint8          *data,
+                                             gsize                  data_len,
+                                             ValidityFlashIcParams *ic_out,
+                                             guint16               *num_partitions_out);
 
 /**
  * validity_pair_classify_tls_flash:
@@ -240,9 +240,9 @@ gboolean validity_pair_parse_flash_info (const guint8          *data,
  *
  * Returns: the #ValidityTlsFlashClass.
  */
-ValidityTlsFlashClass validity_pair_classify_tls_flash (guint16       status,
-                                                        const guint8 *data,
-                                                        gsize         len);
+ValidityTlsFlashClass fpi_validity_pair_classify_tls_flash (guint16       status,
+                                                            const guint8 *data,
+                                                            gsize         len);
 
 /**
  * validity_pair_decide:
@@ -258,9 +258,9 @@ ValidityTlsFlashClass validity_pair_classify_tls_flash (guint16       status,
  *
  * Returns: the #ValidityPairDecision.
  */
-ValidityPairDecision validity_pair_decide (guint16               num_partitions,
-                                           ValidityTlsFlashClass flash,
-                                           gboolean              check_only);
+ValidityPairDecision fpi_validity_pair_decide (guint16               num_partitions,
+                                               ValidityTlsFlashClass flash,
+                                               gboolean              check_only);
 
 /**
  * validity_pair_decide_for_policy:
@@ -276,10 +276,10 @@ ValidityPairDecision validity_pair_decide (guint16               num_partitions,
  *
  * Returns: the #ValidityPairDecision.
  */
-ValidityPairDecision validity_pair_decide_for_policy (guint16               num_partitions,
-                                                      ValidityTlsFlashClass flash,
-                                                      gboolean              check_only,
-                                                      gboolean              allow_provisioning);
+ValidityPairDecision fpi_validity_pair_decide_for_policy (guint16               num_partitions,
+                                                          ValidityTlsFlashClass flash,
+                                                          gboolean              check_only,
+                                                          gboolean              allow_provisioning);
 
 /**
  * validity_pair_state_init:
@@ -287,7 +287,7 @@ ValidityPairDecision validity_pair_decide_for_policy (guint16               num_
  *
  * Zero-initialize the pairing state.
  */
-void validity_pair_state_init (ValidityPairState *state);
+void fpi_validity_pair_state_init (ValidityPairState *state);
 
 /**
  * validity_pair_state_free:
@@ -295,7 +295,7 @@ void validity_pair_state_init (ValidityPairState *state);
  *
  * Free any allocated resources in the pairing state.
  */
-void validity_pair_state_free (ValidityPairState *state);
+void fpi_validity_pair_state_free (ValidityPairState *state);
 
 /* ================================================================
  * Pairing SSM
@@ -393,7 +393,7 @@ typedef enum {
  *
  * Returns: a new FpiSsm.
  */
-FpiSsm *validity_pair_ssm_new (FpDevice *dev);
+FpiSsm *fpi_validity_pair_ssm_new (FpDevice *dev);
 
 /**
  * validity_pair_run_state:
@@ -402,8 +402,8 @@ FpiSsm *validity_pair_ssm_new (FpDevice *dev);
  *
  * State machine runner for the pairing SSM.
  */
-void validity_pair_run_state (FpiSsm   *ssm,
-                              FpDevice *dev);
+void fpi_validity_pair_run_state (FpiSsm   *ssm,
+                                  FpDevice *dev);
 
 /**
  * validity_pair_build_tls_flash:
@@ -416,7 +416,7 @@ void validity_pair_run_state (FpiSsm   *ssm,
  *
  * Returns: newly allocated 4096-byte buffer. Free with g_free().
  */
-guint8 *validity_pair_build_tls_flash (const ValidityPairState *state,
-                                       const guint8            *ca_cert,
-                                       gsize                    ca_cert_len,
-                                       gsize                   *out_len);
+guint8 *fpi_validity_pair_build_tls_flash (const ValidityPairState *state,
+                                           const guint8            *ca_cert,
+                                           gsize                    ca_cert_len,
+                                           gsize                   *out_len);

@@ -341,9 +341,9 @@ static const ValidityDeviceInfo device_info_table[] = {
  * ================================================================ */
 
 gboolean
-validity_sensor_parse_identify (const guint8        *data,
-                                gsize                data_len,
-                                ValiditySensorIdent *out)
+fpi_validity_sensor_parse_identify (const guint8        *data,
+                                    gsize                data_len,
+                                    ValiditySensorIdent *out)
 {
   guint32 zeroes;
 
@@ -364,8 +364,8 @@ validity_sensor_parse_identify (const guint8        *data,
  * ================================================================ */
 
 const ValidityDeviceInfo *
-validity_device_info_lookup (guint16 major,
-                             guint16 version)
+fpi_validity_device_info_lookup (guint16 major,
+                                 guint16 version)
 {
   const ValidityDeviceInfo *fuzzy_match = NULL;
 
@@ -396,7 +396,7 @@ validity_device_info_lookup (guint16 major,
  * ================================================================ */
 
 const ValiditySensorTypeInfo *
-validity_sensor_type_info_lookup (guint16 sensor_type)
+fpi_validity_sensor_type_info_lookup (guint16 sensor_type)
 {
   for (gsize i = 0; i < SENSOR_TYPE_INFO_TABLE_LEN; i++)
     if (sensor_type_info_table[i].sensor_type == sensor_type)
@@ -413,7 +413,7 @@ validity_sensor_type_info_lookup (guint16 sensor_type)
  * type-3 interrupt as a substitute. Mirrors python-validity's
  * `real_device_type in (0xd51, 0x969)` check in Sensor.capture(). */
 gboolean
-validity_sensor_skips_finger_down (guint16 sensor_type)
+fpi_validity_sensor_skips_finger_down (guint16 sensor_type)
 {
   return sensor_type == 0x0969 || sensor_type == 0x0d51;
 }
@@ -432,9 +432,9 @@ validity_sensor_skips_finger_down (guint16 sensor_type)
 #define FACTORY_BITS_CMD_LEN 9
 
 gsize
-validity_sensor_build_factory_bits_cmd (guint16 tag,
-                                        guint8 *buf,
-                                        gsize   buf_len)
+fpi_validity_sensor_build_factory_bits_cmd (guint16 tag,
+                                            guint8 *buf,
+                                            gsize   buf_len)
 {
   if (buf_len < FACTORY_BITS_CMD_LEN)
     return 0;
@@ -449,13 +449,13 @@ validity_sensor_build_factory_bits_cmd (guint16 tag,
  * ================================================================ */
 
 void
-validity_sensor_state_init (ValiditySensorState *state)
+fpi_validity_sensor_state_init (ValiditySensorState *state)
 {
   memset (state, 0, sizeof (*state));
 }
 
 void
-validity_sensor_state_clear (ValiditySensorState *state)
+fpi_validity_sensor_state_clear (ValiditySensorState *state)
 {
   g_clear_pointer (&state->factory_bits, g_free);
   memset (state, 0, sizeof (*state));

@@ -188,7 +188,7 @@ a2_step (FpiSsm            *ssm,
   switch (op)
     {
     case VALIDITY_A2_OP_CAPTURE:
-      vcsfw_tls_cmd_send (self, ssm, d->capture_cmd, d->capture_cmd_len, NULL);
+      fpi_vcsfw_tls_cmd_send (self, ssm, d->capture_cmd, d->capture_cmd_len, NULL);
       return;
 
     case VALIDITY_A2_OP_WAIT_CAPTURE_EVENT:
@@ -253,7 +253,7 @@ a2_step (FpiSsm            *ssm,
             return;
           }
 
-        vcsfw_tls_cmd_send (self, ssm, cmd, len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, len, NULL);
       }
       return;
     }
@@ -365,8 +365,8 @@ a2_complete_match (FpDevice             *dev,
   else
     fpi_device_get_verify_data (dev, &print);
 
-  result = validity_match_decide (action == A2_ACTION_IDENTIFY, print, gallery,
-                                  match, user, &gallery_match);
+  result = fpi_validity_match_decide (action == A2_ACTION_IDENTIFY, print, gallery,
+                                      match, user, &gallery_match);
 
   if (match && result != FPI_MATCH_SUCCESS)
     fp_info ("The sensor matched user record %u (finger %u), which is not "
@@ -431,7 +431,7 @@ a2_ssm_done (FpiSsm   *ssm,
 
   if (d->capture_done)
     {
-      d->capture_done (dev, flow, error ? validity_map_removed_error (error) : NULL,
+      d->capture_done (dev, flow, error ? fpi_validity_map_removed_error (error) : NULL,
                        d->capture_data);
       return;
     }
@@ -445,7 +445,7 @@ a2_ssm_done (FpiSsm   *ssm,
       fp_warn ("00a2 %s failed: %s",
                d->action == A2_ACTION_CAPTURE ? "capture" : "match",
                error->message);
-      a2_complete_error (dev, d->action, validity_map_removed_error (error));
+      a2_complete_error (dev, d->action, fpi_validity_map_removed_error (error));
       return;
     }
 
@@ -539,11 +539,11 @@ a2_start (FpDevice             *device,
                              VALIDITY_A2_FLAGS_RULE_WINDOWS);
 
   /* Built once: a re-arm sends the same program */
-  d->capture_cmd = validity_capture_build_cmd_02 (&self->capture,
-                                                  self->sensor.type_info,
-                                                  action == A2_ACTION_ENROLL ?
-                                                  VALIDITY_CAPTURE_ENROLL : VALIDITY_CAPTURE_IDENTIFY,
-                                                  &d->capture_cmd_len);
+  d->capture_cmd = fpi_validity_capture_build_cmd_02 (&self->capture,
+                                                      self->sensor.type_info,
+                                                      action == A2_ACTION_ENROLL ?
+                                                      VALIDITY_CAPTURE_ENROLL : VALIDITY_CAPTURE_IDENTIFY,
+                                                      &d->capture_cmd_len);
   if (!d->capture_cmd)
     {
       a2_ssm_data_free (d);
@@ -586,7 +586,7 @@ fpi_validity_a2_capture (FpDevice *device)
 
   fpi_device_get_capture_data (device, &wait_for_finger);
 
-  if (!validity_dev_overrides_built () ||
+  if (!fpi_validity_dev_overrides_built () ||
       !fpi_validity_device_policy (self->dev_type)->allow_image_capture)
     {
       fpi_device_capture_complete (device, NULL,

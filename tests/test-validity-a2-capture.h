@@ -604,7 +604,7 @@ test_a2_match_result_parse (void)
     g_assert_cmpuint (res.subtype, ==, 7);
     g_assert_cmpuint (res.hash_len, ==, 32);
     g_assert_cmpuint (res.hash[0], ==, 0xa0);
-    validity_match_result_clear (&res);
+    fpi_validity_match_result_clear (&res);
   }
 
   /* Tag 2 == 0: the vendor driver's "no match" */
@@ -616,7 +616,7 @@ test_a2_match_result_parse (void)
                                                        &error));
     g_assert_false (res.matched);
     g_assert_cmpuint (res.user_dbid, ==, 5);
-    validity_match_result_clear (&res);
+    fpi_validity_match_result_clear (&res);
   }
 
   /* Missing tag 1, 2 or 3: not a match (but well-formed) */
@@ -629,7 +629,7 @@ test_a2_match_result_parse (void)
                                                          &error));
       g_assert_no_error (error);
       g_assert_false (res.matched);
-      validity_match_result_clear (&res);
+      fpi_validity_match_result_clear (&res);
     }
 
   /* Wrong length of any fixed-length tag: malformed */
@@ -652,7 +652,7 @@ test_a2_match_result_parse (void)
           g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
           g_assert_false (res.matched);
         }
-      validity_match_result_clear (&res);
+      fpi_validity_match_result_clear (&res);
     }
 
   /* The leading total-length field one more or one less than the data
@@ -671,7 +671,7 @@ test_a2_match_result_parse (void)
       g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
       g_assert_nonnull (strstr (error->message, "length field"));
       g_assert_false (res.matched);
-      validity_match_result_clear (&res);
+      fpi_validity_match_result_clear (&res);
     }
 
   /* Length field not equal to the data that follows; truncated TLV;
@@ -707,7 +707,7 @@ test_a2_match_result_parse (void)
     g_assert_false (fpi_validity_a2_parse_match_result (twice->data, twice->len,
                                                         &res, &e4));
     g_assert_error (e4, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
-    validity_match_result_clear (&res);
+    fpi_validity_match_result_clear (&res);
   }
 
   /* Empty dictionary, unknown tags: well-formed, no match */
@@ -726,7 +726,7 @@ test_a2_match_result_parse (void)
                                                        &res, &error));
     g_assert_false (res.matched);
     g_assert_false (fpi_validity_a2_parse_match_result (NULL, 0, &res, &error));
-    validity_match_result_clear (&res);
+    fpi_validity_match_result_clear (&res);
   }
 }
 
@@ -957,8 +957,8 @@ test_a2_flow_verify_no_match (void)
                                                     FP_FINGER_RIGHT_INDEX,
                                                     ID_RIGHT_INDEX);
 
-    g_assert_cmpint (validity_match_decide (FALSE, print, NULL, NULL,
-                                            &run.flow.user, NULL),
+    g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, NULL,
+                                                &run.flow.user, NULL),
                      ==, FPI_MATCH_FAIL);
   }
   a2_run_clear (&run);
@@ -974,7 +974,7 @@ test_a2_flow_verify_match (void)
                                                   ID_RIGHT_INDEX);
   g_autoptr(FpPrint) other = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_CAROL_RIGHT_INDEX);
-  guint16 subtype = validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
+  guint16 subtype = fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
   g_autoptr(GByteArray) result = a2_match_payload (8, 0x2c, subtype, -1, -1);
   g_autoptr(GByteArray) user_reply = g_byte_array_new ();
   g_autofree guint8 *identity = NULL;
@@ -983,7 +983,7 @@ test_a2_flow_verify_match (void)
   A2Run run;
 
   /* 4a reply: dbid 8, 1 finger (dbid 9, subtype, storage 3), identity */
-  identity = validity_db_build_identity (ID_RIGHT_INDEX, &identity_len);
+  identity = fpi_validity_db_build_identity (ID_RIGHT_INDEX, &identity_len);
   {
     guint8 h[8] = { 8, 0, 1, 0, 0, 0, identity_len & 0xff, identity_len >> 8 };
     guint8 f[8] = { 9, 0, subtype & 0xff, subtype >> 8, 3, 0, 0, 0 };
@@ -1034,11 +1034,11 @@ test_a2_flow_verify_match (void)
   g_assert_true (run.flow.user_read);
   g_assert_cmpuint (run.flow.stops, ==, 0);
 
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &run.flow.result,
-                                          &run.flow.user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &run.flow.result,
+                                              &run.flow.user, NULL),
                    ==, FPI_MATCH_SUCCESS);
-  g_assert_cmpint (validity_match_decide (FALSE, other, NULL, &run.flow.result,
-                                          &run.flow.user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, other, NULL, &run.flow.result,
+                                              &run.flow.user, NULL),
                    ==, FPI_MATCH_FAIL);
   a2_run_clear (&run);
 }
@@ -1732,13 +1732,13 @@ test_a2_flow_commands (void)
   g_assert_cmpmem (cmd, len, "\x62\xd4\xc3\xb2\xa1", 5);
   g_free (cmd);
 
-  glow = validity_capture_glow_start_cmd (&glow_len);
+  glow = fpi_validity_capture_glow_start_cmd (&glow_len);
   cmd = fpi_validity_a2_flow_build_cmd (&flow, VALIDITY_A2_OP_GLOW_START, &len);
   g_assert_cmpuint (len, ==, 125);
   g_assert_cmpmem (cmd, len, glow, glow_len);
   g_free (cmd);
 
-  glow = validity_capture_glow_end_cmd (&glow_len);
+  glow = fpi_validity_capture_glow_end_cmd (&glow_len);
   cmd = fpi_validity_a2_flow_build_cmd (&flow, VALIDITY_A2_OP_GLOW_END, &len);
   g_assert_cmpmem (cmd, len, glow, glow_len);
   g_free (cmd);
@@ -1851,7 +1851,7 @@ test_a2_sensor_gate (void)
   g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
 
   c.capture_prog = NULL;
-  validity_capture_state_clear (&c);
+  fpi_validity_capture_state_clear (&c);
 }
 
 /* The real (0x190, 0x6a) identity of the E480 sensor resolves to type
@@ -1859,18 +1859,18 @@ test_a2_sensor_gate (void)
 static void
 test_a2_sensor_gate_real_setup (void)
 {
-  const ValidityDeviceInfo *info = validity_device_info_lookup (0x0190, 0x006a);
+  const ValidityDeviceInfo *info = fpi_validity_device_info_lookup (0x0190, 0x006a);
   const ValiditySensorTypeInfo *type_info;
   ValidityCaptureState c;
 
   g_assert_nonnull (info);
   g_assert_cmphex (info->type, ==, 0x0199);
-  type_info = validity_sensor_type_info_lookup (info->type);
+  type_info = fpi_validity_sensor_type_info_lookup (info->type);
   g_assert_nonnull (type_info);
 
-  validity_capture_state_init (&c);
-  g_assert_true (validity_capture_state_setup (&c, type_info, info->type,
-                                               6, 7, NULL, 0));
+  fpi_validity_capture_state_init (&c);
+  g_assert_true (fpi_validity_capture_state_setup (&c, type_info, info->type,
+                                                   6, 7, NULL, 0));
   /* no factory bits given here: only that check fails */
   g_assert_cmpint (fpi_validity_a2_check_sensor (info->type, info->type, &c, FALSE),
                    ==, VALIDITY_A2_SENSOR_NO_FACTORY_CAL);
@@ -1878,7 +1878,7 @@ test_a2_sensor_gate_real_setup (void)
   c.factory_calibration_values_len = 112;
   g_assert_cmpint (fpi_validity_a2_check_sensor (info->type, info->type, &c, FALSE),
                    ==, VALIDITY_A2_SENSOR_OK);
-  validity_capture_state_clear (&c);
+  fpi_validity_capture_state_clear (&c);
 }
 
 /* Image capture: the vfunc exists only in developer builds */
@@ -1887,9 +1887,9 @@ test_a2_capture_vfunc_dev_only (void)
 {
   FpDeviceClass *klass = g_type_class_ref (FPI_TYPE_DEVICE_VALIDITY);
 
-  g_assert_true ((klass->capture != NULL) == validity_dev_overrides_built ());
+  g_assert_true ((klass->capture != NULL) == fpi_validity_dev_overrides_built ());
   g_assert_true (((klass->features & FP_DEVICE_FEATURE_CAPTURE) != 0) ==
-                 validity_dev_overrides_built ());
+                 fpi_validity_dev_overrides_built ());
   g_type_class_unref (klass);
 
   g_assert_true (fpi_validity_device_policy (VALIDITY_DEV_A2)->allow_image_capture);

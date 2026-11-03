@@ -420,9 +420,9 @@ load_verified (const gchar *dir, const gchar *name, GError **error)
   ValidityDataStore store;
   GBytes *bytes = NULL;
 
-  validity_data_store_init (&store);
-  if (validity_data_load_file (&store, VALIDITY_DATA_INIT, path, &local))
-    bytes = g_bytes_ref (validity_data_get (&store, VALIDITY_DATA_INIT));
+  fpi_validity_data_store_init (&store);
+  if (fpi_validity_data_load_file (&store, VALIDITY_DATA_INIT, path, &local))
+    bytes = g_bytes_ref (fpi_validity_data_get (&store, VALIDITY_DATA_INIT));
   else if (g_error_matches (local, G_FILE_ERROR, G_FILE_ERROR_NOENT))
     g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND,
                  "MOH table %s missing in %s (re-run make_validity_moh_tables.py)", name, dir);
@@ -431,7 +431,7 @@ load_verified (const gchar *dir, const gchar *name, GError **error)
                  "MOH table %s: %s", name, local->message);
   else
     g_propagate_error (error, g_steal_pointer (&local));
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   return bytes;
 }
 

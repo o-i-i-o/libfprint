@@ -108,36 +108,36 @@ typedef struct
 
 /* ---- Functions ---- */
 
-void vcsfw_cmd_run_state (FpiSsm   *ssm,
-                          FpDevice *dev);
-
-VcsfwCmdData *vcsfw_cmd_data_new (const guint8    *cmd,
-                                  gsize            cmd_len,
-                                  VcsfwCmdCallback callback);
-
-void vcsfw_cmd_data_free (gpointer data);
-
-void vcsfw_cmd_send (FpiDeviceValidity *self,
-                     FpiSsm            *parent_ssm,
-                     const guint8      *cmd,
-                     gsize              cmd_len,
-                     VcsfwCmdCallback   callback);
-
-void vcsfw_tls_cmd_run_state (FpiSsm   *ssm,
+void fpi_vcsfw_cmd_run_state (FpiSsm   *ssm,
                               FpDevice *dev);
 
-void vcsfw_tls_cmd_send (FpiDeviceValidity *self,
+VcsfwCmdData *fpi_vcsfw_cmd_data_new (const guint8    *cmd,
+                                      gsize            cmd_len,
+                                      VcsfwCmdCallback callback);
+
+void fpi_vcsfw_cmd_data_free (gpointer data);
+
+void fpi_vcsfw_cmd_send (FpiDeviceValidity *self,
                          FpiSsm            *parent_ssm,
                          const guint8      *cmd,
                          gsize              cmd_len,
                          VcsfwCmdCallback   callback);
 
+void fpi_vcsfw_tls_cmd_run_state (FpiSsm   *ssm,
+                                  FpDevice *dev);
+
+void fpi_vcsfw_tls_cmd_send (FpiDeviceValidity *self,
+                             FpiSsm            *parent_ssm,
+                             const guint8      *cmd,
+                             gsize              cmd_len,
+                             VcsfwCmdCallback   callback);
+
 /* Decode the 2-byte status at the start of a VCSFW reply (u16 LE, the same
 * for plain and decrypted TLS replies). Returns FALSE if @reply_len < 2. */
-gboolean vcsfw_parse_status (const guint8 *reply,
-                             gsize         reply_len,
-                             guint16      *status);
+gboolean fpi_vcsfw_parse_status (const guint8 *reply,
+                                 gsize         reply_len,
+                                 guint16      *status);
 
-gboolean vcsfw_parse_version (const guint8        *data,
-                              gsize                data_len,
-                              ValidityVersionInfo *info);
+gboolean fpi_vcsfw_parse_version (const guint8        *data,
+                                  gsize                data_len,
+                                  ValidityVersionInfo *info);

@@ -384,7 +384,7 @@ fpi_validity_a2_fwext_gate (const guint8 *reply,
   ValidityFwInfo info;
   guint16 status = 0;
 
-  if (!vcsfw_parse_status (reply, reply_len, &status))
+  if (!fpi_vcsfw_parse_status (reply, reply_len, &status))
     {
       g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED,
                    "Refusing to use this 06cb:00a2 sensor: its GET_FW_INFO "
@@ -400,11 +400,11 @@ fpi_validity_a2_fwext_gate (const guint8 *reply,
                    "firmware extension loaded (GET_FW_INFO status 0x%04x). "
                    "This driver never uploads firmware to a 00a2 sensor "
                    "(it would need %s)", status,
-                   validity_fwext_get_firmware_name (0x06cb, 0x00a2, NULL));
+                   fpi_validity_fwext_get_firmware_name (0x06cb, 0x00a2, NULL));
       return FALSE;
     }
 
-  if (!validity_fwext_parse_fw_info (reply + 2, reply_len - 2, status, &info) ||
+  if (!fpi_validity_fwext_parse_fw_info (reply + 2, reply_len - 2, status, &info) ||
       !info.loaded)
     {
       g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED,
@@ -431,7 +431,7 @@ fpi_validity_a2_init_gate (const guint8 *reply,
 {
   guint16 status = 0;
 
-  if (!vcsfw_parse_status (reply, reply_len, &status))
+  if (!fpi_vcsfw_parse_status (reply, reply_len, &status))
     {
       g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO,
                    "The 06cb:00a2 sensor's reply to the init blob is too "

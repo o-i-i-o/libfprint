@@ -23,13 +23,13 @@
  * without a timeout (finger), Wt = EP 0x83 wait with the match timeout.
  */
 
-#define vcsfw_tls_cmd_send a2f_tls_cmd_send
+#define fpi_vcsfw_tls_cmd_send a2f_tls_cmd_send
 #define fpi_usb_transfer_submit a2f_usb_submit
 
 #include "drivers/validity/validity_a2_verify.c"
 #include "drivers/validity/validity_a2_enroll.c"
 
-#undef vcsfw_tls_cmd_send
+#undef fpi_vcsfw_tls_cmd_send
 #undef fpi_usb_transfer_submit
 
 #include <stdlib.h>
@@ -277,7 +277,7 @@ chip_reply (const guint8 *cmd,
         {
           gsize n;
           const guint8 *id = g_bytes_get_data (sim.identity, &n);
-          guint16 subtype = validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
+          guint16 subtype = fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
           guint8 hdr[] = { 0x34, 2, 1, 0, 0, 0, n & 255, n >> 8 };
           guint8 finger[] = { 0x45, 3, subtype & 255, subtype >> 8, 0x23, 1, 0x60, 0x5a };
           sim.readback_done = TRUE;
@@ -576,21 +576,21 @@ static void
 a2f_open (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
-  const ValidityDeviceInfo *info = validity_device_info_lookup (0x0190, 0x006a);
+  const ValidityDeviceInfo *info = fpi_validity_device_info_lookup (0x0190, 0x006a);
 
-  validity_tls_init (&self->tls);
-  validity_sensor_state_init (&self->sensor);
-  validity_capture_state_init (&self->capture);
+  fpi_validity_tls_init (&self->tls);
+  fpi_validity_sensor_state_init (&self->sensor);
+  fpi_validity_capture_state_init (&self->capture);
 
   self->dev_type = VALIDITY_DEV_A2;
   self->tls.secure_rx = TRUE;
   g_assert_nonnull (info);
   self->sensor.device_info = info;
-  self->sensor.type_info = validity_sensor_type_info_lookup (info->type);
+  self->sensor.type_info = fpi_validity_sensor_type_info_lookup (info->type);
   self->sensor.real_sensor_type = info->type;
-  g_assert_true (validity_capture_state_setup (&self->capture,
-                                               self->sensor.type_info,
-                                               info->type, 6, 7, NULL, 0));
+  g_assert_true (fpi_validity_capture_state_setup (&self->capture,
+                                                   self->sensor.type_info,
+                                                   info->type, 6, 7, NULL, 0));
   self->capture.factory_calibration_values = g_malloc0 (112);
   self->capture.factory_calibration_values_len = 112;
   if (!sim.scn->uncalibrated)
@@ -609,9 +609,9 @@ a2f_close (FpDevice *device)
 
   g_clear_pointer (&self->cmd_response_data, g_free);
   self->cmd_response_len = 0;
-  validity_capture_state_clear (&self->capture);
-  validity_sensor_state_clear (&self->sensor);
-  validity_tls_free (&self->tls);
+  fpi_validity_capture_state_clear (&self->capture);
+  fpi_validity_sensor_state_clear (&self->sensor);
+  fpi_validity_tls_free (&self->tls);
   fpi_device_close_complete (device, NULL);
 }
 
@@ -718,8 +718,8 @@ make_user4a (guint16 subtype)
 {
   GByteArray *r = g_byte_array_new ();
   gsize identity_len = 0;
-  g_autofree guint8 *identity = validity_db_build_identity (ID_RIGHT_INDEX,
-                                                            &identity_len);
+  g_autofree guint8 *identity = fpi_validity_db_build_identity (ID_RIGHT_INDEX,
+                                                                &identity_len);
   guint8 h[8] = { 8, 0, 1, 0, 0, 0, identity_len & 0xff, identity_len >> 8 };
   guint8 f[8] = { 9, 0, subtype & 0xff, subtype >> 8, 3, 0, 0, 0 };
 
@@ -900,7 +900,7 @@ test_identify_empty_gallery (void)
 static void
 test_match (void)
 {
-  guint16 subtype = validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
+  guint16 subtype = fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
 
   for (gint identify = 0; identify <= 1; identify++)
     {
@@ -1106,7 +1106,7 @@ check_cancelled (Scn         *s,
 static void
 test_cancel (void)
 {
-  guint16 subtype = validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
+  guint16 subtype = fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX);
   static guint8 evs1[1][5];
   static guint8 evs5[5][5];
 
@@ -1240,7 +1240,7 @@ test_not_calibrated (void)
       Scn s = { .uncalibrated = TRUE };
       g_auto(Res) r = { 0 };
 
-      if (act == ACT_CAPTURE && !validity_dev_overrides_built ())
+      if (act == ACT_CAPTURE && !fpi_validity_dev_overrides_built ())
         continue;
       run (&s, act, FALSE, 1, &r);
       g_assert_cmpstr (r.wire, ==, "");
@@ -1262,7 +1262,7 @@ test_capture (void)
 
   run (&s, ACT_CAPTURE, FALSE, 1, &r);
 
-  if (!validity_dev_overrides_built ())
+  if (!fpi_validity_dev_overrides_built ())
     {
       /* not in a packaged build: the core refuses, nothing is sent */
       g_assert_cmpstr (r.wire, ==, "");
@@ -1318,7 +1318,7 @@ moh_test_start (FpDevice *device)
   d->builder = fpi_validity_moh_enroll_new (tables, 6, 1, 0);
   fpi_device_set_nr_enroll_stages (device, 6);
   fpi_device_get_enroll_data (device, &print);
-  d->subtype = validity_finger_to_subtype (fp_print_get_finger (print));
+  d->subtype = fpi_validity_finger_to_subtype (fp_print_get_finger (print));
   d->user_id = fpi_print_generate_user_id (print);
   ssm = fpi_ssm_new (device, moh_run, MOH_N_STATES);
   fpi_ssm_set_data (ssm, d, moh_data_free);

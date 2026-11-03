@@ -157,18 +157,18 @@ typedef enum {
 
 /* ---- Public API ---- */
 
-void     validity_tls_init (ValidityTlsState *tls);
-void     validity_tls_free (ValidityTlsState *tls);
+void     fpi_validity_tls_init (ValidityTlsState *tls);
+void     fpi_validity_tls_free (ValidityTlsState *tls);
 
-void     validity_tls_derive_psk (ValidityTlsState *tls);
+void     fpi_validity_tls_derive_psk (ValidityTlsState *tls);
 
 /* The steps of validity_tls_derive_psk() -- exported for testing */
-void     validity_tls_derive_psk_from_files (ValidityTlsState *tls,
-                                             const gchar      *name_path,
-                                             const gchar      *serial_path);
-void     validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
-                                                const gchar      *product_name,
-                                                const gchar      *product_serial);
+void     fpi_validity_tls_derive_psk_from_files (ValidityTlsState *tls,
+                                                 const gchar      *name_path,
+                                                 const gchar      *serial_path);
+void     fpi_validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
+                                                    const gchar      *product_name,
+                                                    const gchar      *product_serial);
 
 /* Developer-only DMI serial override (meson -Dvalidity_dev=true): the
  * path in FP_VALIDITY_DMI_SERIAL_FILE replaces the root-only
@@ -177,7 +177,7 @@ void     validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
 #define VALIDITY_DMI_SERIAL_FILE_ENV "FP_VALIDITY_DMI_SERIAL_FILE"
 
 /* The FP_VALIDITY_DMI_SERIAL_FILE value in a developer build, else NULL */
-const gchar *validity_tls_dev_serial_file (void);
+const gchar *fpi_validity_tls_dev_serial_file (void);
 
 /* Read a DMI serial from @path, failing closed: absolute path, regular
  * file (not a symlink) owned by the current user with no group or other
@@ -185,88 +185,88 @@ const gchar *validity_tls_dev_serial_file (void);
  * once surrounding whitespace is stripped (as for sysfs). The value is
  * never logged or put into @error. Free *@serial_out with
  * validity_tls_free_secret_string(). */
-gboolean validity_tls_read_serial_file (const gchar *path,
-                                        gchar      **serial_out,
-                                        GError     **error);
-void     validity_tls_free_secret_string (gchar *secret);
+gboolean fpi_validity_tls_read_serial_file (const gchar *path,
+                                            gchar      **serial_out,
+                                            GError     **error);
+void     fpi_validity_tls_free_secret_string (gchar *secret);
 
 /* Derive the PSK from the product name in @name_path and the serial in
  * @serial_path (validity_tls_read_serial_file()). Fails closed: no
  * VirtualBox/0 fallback. */
-gboolean validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
-                                                   const gchar      *name_path,
-                                                   const gchar      *serial_path,
-                                                   GError          **error);
+gboolean fpi_validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
+                                                       const gchar      *name_path,
+                                                       const gchar      *serial_path,
+                                                       GError          **error);
 
 /* validity_tls_derive_psk(), or, in a developer build with
  * FP_VALIDITY_DMI_SERIAL_FILE set, validity_tls_derive_psk_with_serial_file()
  * on the sysfs product name; FALSE (with @error) only in the latter case. */
-gboolean validity_tls_derive_psk_checked (ValidityTlsState *tls,
-                                          GError          **error);
+gboolean fpi_validity_tls_derive_psk_checked (ValidityTlsState *tls,
+                                              GError          **error);
 
-gboolean validity_tls_parse_flash (ValidityTlsState *tls,
-                                   const guint8     *data,
-                                   gsize             data_len,
-                                   GError          **error);
+gboolean fpi_validity_tls_parse_flash (ValidityTlsState *tls,
+                                       const guint8     *data,
+                                       gsize             data_len,
+                                       GError          **error);
 
 /* PRF — exported for testing */
-void     validity_tls_prf (const guint8 *secret,
-                           gsize         secret_len,
-                           const guint8 *seed,
-                           gsize         seed_len,
-                           guint8       *output,
-                           gsize         output_len);
+void     fpi_validity_tls_prf (const guint8 *secret,
+                               gsize         secret_len,
+                               const guint8 *seed,
+                               gsize         seed_len,
+                               guint8       *output,
+                               gsize         output_len);
 
 /* Encrypt/decrypt for TLS app data */
-guint8  *validity_tls_encrypt (ValidityTlsState *tls,
-                               const guint8     *plaintext,
-                               gsize             plaintext_len,
-                               gsize            *out_len);
+guint8  *fpi_validity_tls_encrypt (ValidityTlsState *tls,
+                                   const guint8     *plaintext,
+                                   gsize             plaintext_len,
+                                   gsize            *out_len);
 
-guint8  *validity_tls_decrypt (ValidityTlsState *tls,
-                               const guint8     *ciphertext,
-                               gsize             ciphertext_len,
-                               gsize            *out_len,
-                               GError          **error);
+guint8  *fpi_validity_tls_decrypt (ValidityTlsState *tls,
+                                   const guint8     *ciphertext,
+                                   gsize             ciphertext_len,
+                                   gsize            *out_len,
+                                   GError          **error);
 
 /* Build TLS app_data record wrapping a VCSFW command */
-guint8  *validity_tls_wrap_app_data (ValidityTlsState *tls,
-                                     const guint8     *cmd,
-                                     gsize             cmd_len,
-                                     gsize            *out_len);
+guint8  *fpi_validity_tls_wrap_app_data (ValidityTlsState *tls,
+                                         const guint8     *cmd,
+                                         gsize             cmd_len,
+                                         gsize            *out_len);
 
 /* Parse TLS response, returning decrypted app_data */
-guint8  *validity_tls_unwrap_response (ValidityTlsState *tls,
-                                       const guint8     *response,
-                                       gsize             response_len,
-                                       gsize            *out_len,
-                                       GError          **error);
+guint8  *fpi_validity_tls_unwrap_response (ValidityTlsState *tls,
+                                           const guint8     *response,
+                                           gsize             response_len,
+                                           gsize            *out_len,
+                                           GError          **error);
 
 /* Build the full handshake USB commands.
  * Returns the first USB command (ClientHello with 0x44000000 prefix). */
-guint8  *validity_tls_build_client_hello (ValidityTlsState *tls,
-                                          gsize            *out_len);
+guint8  *fpi_validity_tls_build_client_hello (ValidityTlsState *tls,
+                                              gsize            *out_len);
 
 /* Parse ServerHello + CertReq + ServerHelloDone from USB response */
-gboolean validity_tls_parse_server_hello (ValidityTlsState *tls,
-                                          const guint8     *data,
-                                          gsize             data_len,
-                                          GError          **error);
+gboolean fpi_validity_tls_parse_server_hello (ValidityTlsState *tls,
+                                              const guint8     *data,
+                                              gsize             data_len,
+                                              GError          **error);
 
 /* Build Certificate + ClientKeyExchange + CertVerify + ChangeCipherSpec + Finished */
-guint8  *validity_tls_build_client_finish (ValidityTlsState *tls,
-                                           gsize            *out_len);
+guint8  *fpi_validity_tls_build_client_finish (ValidityTlsState *tls,
+                                               gsize            *out_len);
 
 /* Parse server ChangeCipherSpec + Finished */
-gboolean validity_tls_parse_server_finish (ValidityTlsState *tls,
-                                           const guint8     *data,
-                                           gsize             data_len,
-                                           GError          **error);
+gboolean fpi_validity_tls_parse_server_finish (ValidityTlsState *tls,
+                                               const guint8     *data,
+                                               gsize             data_len,
+                                               GError          **error);
 
 /* SSM runner for TLS handshake */
-void     validity_tls_handshake_run_state (FpiSsm   *ssm,
-                                           FpDevice *dev);
+void     fpi_validity_tls_handshake_run_state (FpiSsm   *ssm,
+                                               FpDevice *dev);
 
 /* SSM runner for reading flash TLS data */
-void     validity_tls_flash_read_run_state (FpiSsm   *ssm,
-                                            FpDevice *dev);
+void     fpi_validity_tls_flash_read_run_state (FpiSsm   *ssm,
+                                                FpDevice *dev);

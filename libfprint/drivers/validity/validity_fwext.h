@@ -84,66 +84,66 @@ typedef enum {
 
 /* ---- API ---- */
 
-gboolean validity_fwext_parse_fw_info (const guint8   *data,
-                                       gsize           data_len,
-                                       guint16         status,
-                                       ValidityFwInfo *info);
+gboolean fpi_validity_fwext_parse_fw_info (const guint8   *data,
+                                           gsize           data_len,
+                                           guint16         status,
+                                           ValidityFwInfo *info);
 
-gboolean validity_fwext_load_file (const gchar       *filename,
-                                   ValidityFwextFile *fwext,
-                                   GError           **error);
+gboolean fpi_validity_fwext_load_file (const gchar       *filename,
+                                       ValidityFwextFile *fwext,
+                                       GError           **error);
 
-void     validity_fwext_file_clear (ValidityFwextFile *fwext);
+void     fpi_validity_fwext_file_clear (ValidityFwextFile *fwext);
 
 /* Firmware extension filename for @vid:@pid, or NULL if unknown. If @source
  * is not NULL it is set to the vendor package that ships the file (NULL when
  * the device is unknown), for error messages. */
-const gchar *validity_fwext_get_firmware_name (guint16       vid,
-                                               guint16       pid,
-                                               const gchar **source);
+const gchar *fpi_validity_fwext_get_firmware_name (guint16       vid,
+                                                   guint16       pid,
+                                                   const gchar **source);
 
-gchar   *validity_fwext_find_firmware (guint16  vid,
-                                       guint16  pid,
-                                       GError **error);
+gchar   *fpi_validity_fwext_find_firmware (guint16  vid,
+                                           guint16  pid,
+                                           GError **error);
 
-void     validity_fwext_build_write_hw_reg32 (guint32 addr,
-                                              guint32 value,
-                                              guint8 *cmd,
-                                              gsize  *cmd_len);
+void     fpi_validity_fwext_build_write_hw_reg32 (guint32 addr,
+                                                  guint32 value,
+                                                  guint8 *cmd,
+                                                  gsize  *cmd_len);
 
-void     validity_fwext_build_read_hw_reg32 (guint32 addr,
-                                             guint8 *cmd,
-                                             gsize  *cmd_len);
+void     fpi_validity_fwext_build_read_hw_reg32 (guint32 addr,
+                                                 guint8 *cmd,
+                                                 gsize  *cmd_len);
 
-gboolean validity_fwext_parse_read_hw_reg32 (const guint8 *data,
-                                             gsize         data_len,
-                                             guint32      *value);
+gboolean fpi_validity_fwext_parse_read_hw_reg32 (const guint8 *data,
+                                                 gsize         data_len,
+                                                 guint32      *value);
 
-void     validity_fwext_build_write_flash (guint8        partition,
-                                           guint32       offset,
-                                           const guint8 *data,
-                                           gsize         data_len,
-                                           guint8       *cmd,
-                                           gsize        *cmd_len);
+void     fpi_validity_fwext_build_write_flash (guint8        partition,
+                                               guint32       offset,
+                                               const guint8 *data,
+                                               gsize         data_len,
+                                               guint8       *cmd,
+                                               gsize        *cmd_len);
 
-void     validity_fwext_build_write_fw_sig (guint8        partition,
-                                            const guint8 *signature,
-                                            gsize         sig_len,
-                                            guint8       *cmd,
-                                            gsize        *cmd_len);
+void     fpi_validity_fwext_build_write_fw_sig (guint8        partition,
+                                                const guint8 *signature,
+                                                gsize         sig_len,
+                                                guint8       *cmd,
+                                                gsize        *cmd_len);
 
-void     validity_fwext_build_reboot (guint8 *cmd,
-                                      gsize  *cmd_len);
+void     fpi_validity_fwext_build_reboot (guint8 *cmd,
+                                          gsize  *cmd_len);
 
 typedef struct _FpiDeviceValidity FpiDeviceValidity;
 
-const guint8 *validity_fwext_get_db_write_enable (FpiDeviceValidity *self,
-                                                  gsize             *len);
+const guint8 *fpi_validity_fwext_get_db_write_enable (FpiDeviceValidity *self,
+                                                      gsize             *len);
 
 /* SSM entry point for upload state machine */
-void     validity_fwext_upload_run_state (FpiSsm   *ssm,
-                                          FpDevice *dev);
+void     fpi_validity_fwext_upload_run_state (FpiSsm   *ssm,
+                                              FpDevice *dev);
 
 /* Create the fwext upload SSM with data attached.
  * Caller starts it via fpi_ssm_start(). */
-FpiSsm  *validity_fwext_upload_ssm_new (FpDevice *dev);
+FpiSsm  *fpi_validity_fwext_upload_ssm_new (FpDevice *dev);

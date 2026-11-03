@@ -90,7 +90,7 @@ moh_check_space (FpiSsm *ssm, FpiDeviceValidity *self, gboolean before)
   if (!moh_status_ok (ssm, self))
     return FALSE;
   if (!self->cmd_response_data ||
-      !validity_db_parse_info (self->cmd_response_data, self->cmd_response_len, &info) ||
+      !fpi_validity_db_parse_info (self->cmd_response_data, self->cmd_response_len, &info) ||
       info.total == 0 || info.used > info.total || info.free_space > info.total - info.used)
     {
       error = fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO, "Invalid fingerprint DB space reply");
@@ -103,7 +103,7 @@ moh_check_space (FpiSsm *ssm, FpiDeviceValidity *self, gboolean before)
       if (before && info.free_space < VALIDITY_ENROLL_MIN_FREE_BYTES)
         error = fpi_device_error_new (FP_DEVICE_ERROR_DATA_FULL);
     }
-  validity_db_info_clear (&info);
+  fpi_validity_db_info_clear (&info);
   if (error)
     {
       fpi_ssm_mark_failed (ssm, error);
@@ -218,7 +218,7 @@ moh_run (FpiSsm *ssm, FpDevice *device)
     case MOH_INFO:
     case MOH_SPACE:
     case MOH_AFTER:
-      cmd = validity_db_build_cmd_db_info (&len);
+      cmd = fpi_validity_db_build_cmd_db_info (&len);
       break;
 
     case MOH_INFO_RECV:
@@ -229,7 +229,7 @@ moh_run (FpiSsm *ssm, FpDevice *device)
       return;
 
     case MOH_STORAGE:
-      cmd = validity_db_build_cmd_get_user_storage (VALIDITY_STORAGE_NAME, &len);
+      cmd = fpi_validity_db_build_cmd_get_user_storage (VALIDITY_STORAGE_NAME, &len);
       break;
 
     case MOH_STORAGE_RECV:
@@ -240,10 +240,10 @@ moh_run (FpiSsm *ssm, FpDevice *device)
         if (!moh_status_ok (ssm, self))
           return;
         ok = self->cmd_response_data &&
-             validity_db_parse_user_storage (self->cmd_response_data, self->cmd_response_len, &storage) &&
+             fpi_validity_db_parse_user_storage (self->cmd_response_data, self->cmd_response_len, &storage) &&
              storage.dbid != 0 && g_strcmp0 (storage.name, VALIDITY_STORAGE_NAME) == 0;
         d->storage = storage.dbid;
-        validity_user_storage_clear (&storage);
+        fpi_validity_user_storage_clear (&storage);
         if (!ok)
           {
             fpi_ssm_mark_failed (ssm, fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
@@ -274,18 +274,18 @@ moh_run (FpiSsm *ssm, FpDevice *device)
     case MOH_ENABLE_USER:
     case MOH_ENABLE_FINGER:
       {
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &len);
-        vcsfw_tls_cmd_send (self, ssm, blob, len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, len, NULL);
         return;
       }
 
     case MOH_USER:
       {
         gsize identity_len;
-        g_autofree guint8 *identity = validity_db_build_identity (d->user_id, &identity_len);
+        g_autofree guint8 *identity = fpi_validity_db_build_identity (d->user_id, &identity_len);
 
-        cmd = validity_db_build_cmd_new_record (d->storage, VALIDITY_DB_RECORD_TYPE_USER,
-                                                d->storage, identity, identity_len, &len);
+        cmd = fpi_validity_db_build_cmd_new_record (d->storage, VALIDITY_DB_RECORD_TYPE_USER,
+                                                    d->storage, identity, identity_len, &len);
         d->user_sent = TRUE;
         break;
       }
@@ -298,7 +298,7 @@ moh_run (FpiSsm *ssm, FpDevice *device)
         if (!moh_status_ok (ssm, self))
           return;
         if (self->cmd_response_len != 2 ||
-            !validity_db_parse_new_record_id (self->cmd_response_data, self->cmd_response_len, &record) ||
+            !fpi_validity_db_parse_new_record_id (self->cmd_response_data, self->cmd_response_len, &record) ||
             record == 0 || record == d->storage || (state == MOH_STORE_RECV && record == d->user))
           {
             fpi_ssm_mark_failed (ssm, fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
@@ -320,13 +320,13 @@ moh_run (FpiSsm *ssm, FpDevice *device)
         const guint8 *bytes = g_bytes_get_data (store, &len);
 
         d->store_sent = TRUE;
-        vcsfw_tls_cmd_send (self, ssm, bytes, len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, bytes, len, NULL);
         return;
       }
 
     case MOH_USER_COMMIT:
     case MOH_COMMIT:
-      cmd = validity_db_build_cmd_call_cleanups (&len);
+      cmd = fpi_validity_db_build_cmd_call_cleanups (&len);
       break;
 
     case MOH_USER_COMMIT_RECV:
@@ -343,7 +343,7 @@ moh_run (FpiSsm *ssm, FpDevice *device)
       return;
 
     case MOH_READBACK:
-      cmd = validity_db_build_cmd_get_user (d->user, &len);
+      cmd = fpi_validity_db_build_cmd_get_user (d->user, &len);
       break;
 
     case MOH_READBACK_RECV:
@@ -356,8 +356,8 @@ moh_run (FpiSsm *ssm, FpDevice *device)
         if (!moh_status_ok (ssm, self))
           return;
         if (self->cmd_response_data &&
-            validity_db_parse_user (self->cmd_response_data, self->cmd_response_len, &user) &&
-            user.dbid == d->user && validity_db_user_get_id (&user, &id, &id_len) &&
+            fpi_validity_db_parse_user (self->cmd_response_data, self->cmd_response_len, &user) &&
+            user.dbid == d->user && fpi_validity_db_user_get_id (&user, &id, &id_len) &&
             id_len == strlen (d->user_id) && memcmp (id, d->user_id, id_len) == 0)
           {
             for (guint i = 0; i < user.finger_count; i++)
@@ -365,7 +365,7 @@ moh_run (FpiSsm *ssm, FpDevice *device)
                   user.fingers[i].storage == d->storage)
                 found = TRUE;
           }
-        validity_user_clear (&user);
+        fpi_validity_user_clear (&user);
         if (!found)
           fpi_ssm_mark_failed (ssm, fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
                                                               "Stored finger missing from user readback; do not repeat enrollment"));
@@ -382,7 +382,7 @@ moh_run (FpiSsm *ssm, FpDevice *device)
       g_assert_not_reached ();
     }
   moh_clear_response (self);
-  vcsfw_tls_cmd_send (self, ssm, cmd, len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, len, NULL);
 }
 
 static void
@@ -398,7 +398,7 @@ moh_done (FpiSsm *ssm, FpDevice *device, GError *error)
       if (d->user_sent || d->store_sent)
         fp_warn ("00a2 enrollment stopped after DB changes (user %u, finger %u, store sent %d); "
                  "inspect storage before another enrollment", d->user, d->finger, d->store_sent);
-      fpi_device_enroll_complete (device, NULL, validity_map_removed_error (error));
+      fpi_device_enroll_complete (device, NULL, fpi_validity_map_removed_error (error));
       return;
     }
   fpi_device_get_enroll_data (device, &print);
@@ -429,7 +429,7 @@ fpi_validity_a2_enroll (FpDevice *device)
       error = fpi_device_error_new (FP_DEVICE_ERROR_NOT_SUPPORTED);
       goto fail;
     }
-  blob = validity_db_get_write_enable_blob (self, &len);
+  blob = fpi_validity_db_get_write_enable_blob (self, &len);
   sha = blob ? g_compute_checksum_for_data (G_CHECKSUM_SHA256, blob, len) : NULL;
   if (len != 2693 || g_strcmp0 (sha, "cd3fe4e0b3be7af277dceb040bddf53bf001e0dcfffa912c9cd67b2b9c34e371") != 0)
     {
@@ -437,7 +437,7 @@ fpi_validity_a2_enroll (FpDevice *device)
                                         "Enrollment needs the pinned 00a2 db_write_enable.bin (2693 bytes)");
       goto fail;
     }
-  paths = validity_data_resolve_search_paths (validity_data_dev_dir (), &error);
+  paths = fpi_validity_data_resolve_search_paths (fpi_validity_data_dev_dir (), &error);
   if (!paths)
     goto fail;
   tables = fpi_validity_moh_tables_load ((const gchar * const *) paths, &error);
@@ -450,7 +450,7 @@ fpi_validity_a2_enroll (FpDevice *device)
   d->builder = fpi_validity_moh_enroll_new (tables, 6, 6, 250);
   fpi_device_set_nr_enroll_stages (device, fpi_validity_moh_enroll_get_num_frames (d->builder));
   fpi_device_get_enroll_data (device, &print);
-  d->subtype = validity_finger_to_subtype (fp_print_get_finger (print));
+  d->subtype = fpi_validity_finger_to_subtype (fp_print_get_finger (print));
   d->user_id = fpi_print_generate_user_id (print);
   fp_info ("00a2 host enrollment: fixed-point, %u placements", fpi_validity_moh_enroll_get_num_frames (d->builder));
   ssm = fpi_ssm_new (device, moh_run, MOH_N_STATES);

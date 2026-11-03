@@ -99,7 +99,7 @@ test_hal_lookup_all_types (void)
 
   for (guint i = 0; i < G_N_ELEMENTS (types); i++)
     {
-      const ValidityDeviceDesc *desc = validity_hal_device_lookup (types[i]);
+      const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (types[i]);
       g_assert_nonnull (desc);
       g_assert_cmpuint (desc->vid, >, 0);
       g_assert_cmpuint (desc->pid, >, 0);
@@ -125,7 +125,7 @@ test_hal_lookup_by_pid (void)
   for (guint i = 0; i < G_N_ELEMENTS (devices); i++)
     {
       const ValidityDeviceDesc *desc =
-        validity_hal_device_lookup_by_pid (devices[i].vid, devices[i].pid);
+        fpi_validity_hal_device_lookup_by_pid (devices[i].vid, devices[i].pid);
       g_assert_nonnull (desc);
       g_assert_cmpuint (desc->vid, ==, devices[i].vid);
       g_assert_cmpuint (desc->pid, ==, devices[i].pid);
@@ -138,7 +138,7 @@ test_hal_lookup_by_pid (void)
 static void
 test_hal_lookup_invalid (void)
 {
-  const ValidityDeviceDesc *desc = validity_hal_device_lookup (99);
+  const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (99);
 
   g_assert_null (desc);
 }
@@ -150,7 +150,7 @@ static void
 test_hal_lookup_by_pid_invalid (void)
 {
   const ValidityDeviceDesc *desc =
-    validity_hal_device_lookup_by_pid (0x1234, 0x5678);
+    fpi_validity_hal_device_lookup_by_pid (0x1234, 0x5678);
 
   g_assert_null (desc);
 }
@@ -166,7 +166,7 @@ test_hal_blobs_present (void)
 
   for (guint i = 0; i < G_N_ELEMENTS (types); i++)
     {
-      const ValidityDeviceDesc *desc = validity_hal_device_lookup (types[i]);
+      const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (types[i]);
       g_assert_nonnull (desc);
 
       /* All devices must have vid, pid, and flash_layout */
@@ -182,7 +182,7 @@ test_hal_blobs_present (void)
 static void
 test_hal_pid_0090_specifics (void)
 {
-  const ValidityDeviceDesc *desc = validity_hal_device_lookup (VALIDITY_DEV_90);
+  const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (VALIDITY_DEV_90);
 
   g_assert_nonnull (desc);
 
@@ -202,7 +202,7 @@ test_hal_clean_slate_present (void)
 
   for (guint i = 0; i < G_N_ELEMENTS (types); i++)
     {
-      const ValidityDeviceDesc *desc = validity_hal_device_lookup (types[i]);
+      const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (types[i]);
       g_assert_nonnull (desc);
       g_assert_nonnull (desc->flash_layout);
     }
@@ -219,7 +219,7 @@ test_hal_flash_layout (void)
 
   for (guint i = 0; i < G_N_ELEMENTS (types); i++)
     {
-      const ValidityDeviceDesc *desc = validity_hal_device_lookup (types[i]);
+      const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (types[i]);
       g_assert_nonnull (desc);
       g_assert_nonnull (desc->flash_layout);
 
@@ -250,14 +250,14 @@ static void
 test_hal_blob_sizes (void)
 {
   const ValidityDeviceDesc *desc_9a =
-    validity_hal_device_lookup (VALIDITY_DEV_9A);
+    fpi_validity_hal_device_lookup (VALIDITY_DEV_9A);
 
   g_assert_nonnull (desc_9a);
   g_assert_cmpuint (desc_9a->vid, ==, 0x06cb);
   g_assert_cmpuint (desc_9a->pid, ==, 0x009a);
 
   const ValidityDeviceDesc *desc_90 =
-    validity_hal_device_lookup (VALIDITY_DEV_90);
+    fpi_validity_hal_device_lookup (VALIDITY_DEV_90);
   g_assert_nonnull (desc_90);
   g_assert_cmpuint (desc_90->vid, ==, 0x138a);
   g_assert_cmpuint (desc_90->pid, ==, 0x0090);
@@ -270,9 +270,9 @@ static void
 test_hal_lookup_consistency (void)
 {
   const ValidityDeviceDesc *by_type =
-    validity_hal_device_lookup (VALIDITY_DEV_9A);
+    fpi_validity_hal_device_lookup (VALIDITY_DEV_9A);
   const ValidityDeviceDesc *by_pid =
-    validity_hal_device_lookup_by_pid (0x06cb, 0x009a);
+    fpi_validity_hal_device_lookup_by_pid (0x06cb, 0x009a);
 
   g_assert_true (by_type == by_pid);
 }
@@ -287,7 +287,7 @@ test_hal_lookup_consistency (void)
 static void
 test_hal_a2_matches_real_flash_info (void)
 {
-  const ValidityDeviceDesc *desc = validity_hal_device_lookup (VALIDITY_DEV_A2);
+  const ValidityDeviceDesc *desc = fpi_validity_hal_device_lookup (VALIDITY_DEV_A2);
   const guint8 *data = a2_flash_info_reply + 2;
   gsize data_len = sizeof (a2_flash_info_reply) - 2;
   ValidityFlashIcParams ic = { 0 };
@@ -301,13 +301,13 @@ test_hal_a2_matches_real_flash_info (void)
   g_assert_nonnull (desc);
   g_assert_cmphex (desc->vid, ==, 0x06cb);
   g_assert_cmphex (desc->pid, ==, 0x00a2);
-  g_assert_true (desc == validity_hal_device_lookup_by_pid (0x06cb, 0x00a2));
+  g_assert_true (desc == fpi_validity_hal_device_lookup_by_pid (0x06cb, 0x00a2));
   g_assert_nonnull (desc->flash_layout);
 
-  g_assert_true (vcsfw_parse_status (a2_flash_info_reply,
-                                     sizeof (a2_flash_info_reply), &status));
+  g_assert_true (fpi_vcsfw_parse_status (a2_flash_info_reply,
+                                         sizeof (a2_flash_info_reply), &status));
   g_assert_cmphex (status, ==, VCSFW_STATUS_OK);
-  g_assert_true (validity_pair_parse_flash_info (data, data_len, &ic, &pcnt));
+  g_assert_true (fpi_validity_pair_parse_flash_info (data, data_len, &ic, &pcnt));
   g_assert_cmpuint (ic.size, ==, 0x100000);       /* W25Q80B, 1 MiB */
   g_assert_cmpuint (pcnt, ==, 5);
   g_assert_cmpuint (pcnt, ==, desc->flash_layout->num_partitions);
@@ -483,13 +483,13 @@ test_a2_no_reconnect (void)
   dev.tls.session_broken = TRUE;     /* a TLS alert */
 
   for (gsize i = 0; i < G_N_ELEMENTS (errors); i++)
-    g_assert_false (validity_recover_or_fail (&dev, errors[i],
-                                              a2_reconnect_cb, &calls));
+    g_assert_false (fpi_validity_recover_or_fail (&dev, errors[i],
+                                                  a2_reconnect_cb, &calls));
   g_assert_cmpint (calls, ==, 0);
   g_assert_cmpuint (dev.reconnect_attempts, ==, 0);
   g_assert_false (dev.in_recovery);
 
-  validity_reconnect_start (&dev, a2_reconnect_cb, &calls);
+  fpi_validity_reconnect_start (&dev, a2_reconnect_cb, &calls);
   g_assert_cmpint (calls, ==, 1);
   g_assert_cmpuint (dev.reconnect_attempts, ==, 0);
   g_assert_false (dev.in_recovery);
@@ -849,14 +849,14 @@ test_a2_init_blob_pin (void)
         const guint8 *data;
         gsize len = 0;
 
-        validity_data_store_init (&store);
-        g_assert_true (validity_data_load_file (&store, VALIDITY_DATA_INIT, path,
-                                                &error));
+        fpi_validity_data_store_init (&store);
+        g_assert_true (fpi_validity_data_load_file (&store, VALIDITY_DATA_INIT, path,
+                                                    &error));
         g_assert_no_error (error);
-        data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+        data = fpi_validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
         g_assert_true (fpi_validity_a2_init_blob_ok (data, len, &error));
         g_assert_no_error (error);
-        validity_data_store_free (&store);
+        fpi_validity_data_store_free (&store);
         g_test_message ("real init blob %s: accepted by the pin", path);
       }
     else
@@ -886,7 +886,7 @@ test_a2_drop_unused_data (void)
       const ValidityDevicePolicy *policy =
         fpi_validity_device_policy (permissive ? VALIDITY_DEV_9A : VALIDITY_DEV_A2);
 
-      validity_data_store_init (&store);
+      fpi_validity_data_store_init (&store);
       for (gsize i = 0; i < G_N_ELEMENTS (device_tags); i++)
         store.entries[device_tags[i]] = g_bytes_new (b, sizeof (b));
       store.entries[VALIDITY_DATA_TLS_PASSWORD] = g_bytes_new (b, sizeof (b));
@@ -902,7 +902,7 @@ test_a2_drop_unused_data (void)
 
       /* idempotent */
       g_assert_cmpuint (fpi_validity_policy_drop_unused_data (policy, &store), ==, 0);
-      validity_data_store_free (&store);
+      fpi_validity_data_store_free (&store);
     }
 }
 
@@ -925,15 +925,15 @@ test_pair_decide_for_policy (void)
     for (gsize i = 0; i < G_N_ELEMENTS (classes); i++)
       for (gint check_only = 0; check_only <= 1; check_only++)
         {
-          ValidityPairDecision base = validity_pair_decide (counts[c],
-                                                            classes[i],
-                                                            check_only);
+          ValidityPairDecision base = fpi_validity_pair_decide (counts[c],
+                                                                classes[i],
+                                                                check_only);
           ValidityPairDecision allowed =
-            validity_pair_decide_for_policy (counts[c], classes[i],
-                                             check_only, TRUE);
+            fpi_validity_pair_decide_for_policy (counts[c], classes[i],
+                                                 check_only, TRUE);
           ValidityPairDecision forbidden =
-            validity_pair_decide_for_policy (counts[c], classes[i],
-                                             check_only, FALSE);
+            fpi_validity_pair_decide_for_policy (counts[c], classes[i],
+                                                 check_only, FALSE);
 
           g_assert_cmpint (allowed, ==, base);
           g_assert_cmpint (forbidden, !=, VALIDITY_PAIR_PROVISION);
@@ -947,8 +947,8 @@ test_pair_decide_for_policy (void)
   /* The policy of 00a2 forbids provisioning: its open can only ever reach
    * NOT_NEEDED (keys present) or a refusal */
   g_assert_false (fpi_validity_device_policy (VALIDITY_DEV_A2)->allow_provisioning);
-  g_assert_cmpint (validity_pair_decide_for_policy (5, VALIDITY_TLS_FLASH_KEYS_PRESENT,
-                                                    FALSE, FALSE),
+  g_assert_cmpint (fpi_validity_pair_decide_for_policy (5, VALIDITY_TLS_FLASH_KEYS_PRESENT,
+                                                        FALSE, FALSE),
                    ==, VALIDITY_PAIR_NOT_NEEDED);
 }
 
@@ -978,7 +978,7 @@ test_identify_sensor_parse (void)
   FP_WRITE_UINT16_LE (&data[4], 0x0013);   /* version */
   FP_WRITE_UINT16_LE (&data[6], 0x004a);   /* major */
 
-  gboolean ok = validity_sensor_parse_identify (data, sizeof (data), &ident);
+  gboolean ok = fpi_validity_sensor_parse_identify (data, sizeof (data), &ident);
 
   g_assert_true (ok);
   g_assert_cmpuint (ident.hw_major, ==, 0x004a);
@@ -997,9 +997,9 @@ test_identify_sensor_parse_truncated (void)
 
   guint8 data[7] = { 0 };
 
-  g_assert_false (validity_sensor_parse_identify (data, sizeof (data), &ident));
+  g_assert_false (fpi_validity_sensor_parse_identify (data, sizeof (data), &ident));
   /* Also test with 0 length */
-  g_assert_false (validity_sensor_parse_identify (data, 0, &ident));
+  g_assert_false (fpi_validity_sensor_parse_identify (data, 0, &ident));
 }
 
 /* ================================================================
@@ -1013,7 +1013,7 @@ test_device_info_lookup_exact (void)
 {
   const ValidityDeviceInfo *info;
 
-  info = validity_device_info_lookup (0x004a, 0x13);
+  info = fpi_validity_device_info_lookup (0x004a, 0x13);
 
   g_assert_nonnull (info);
   g_assert_cmpuint (info->major, ==, 0x004a);
@@ -1033,7 +1033,7 @@ test_device_info_lookup_another (void)
 {
   const ValidityDeviceInfo *info;
 
-  info = validity_device_info_lookup (0x0071, 0x01);
+  info = fpi_validity_device_info_lookup (0x0071, 0x01);
 
   g_assert_nonnull (info);
   g_assert_cmpuint (info->type, ==, 0x00db);
@@ -1050,7 +1050,7 @@ test_device_info_lookup_unknown (void)
 {
   const ValidityDeviceInfo *info;
 
-  info = validity_device_info_lookup (0xffff, 0x01);
+  info = fpi_validity_device_info_lookup (0xffff, 0x01);
 
   g_assert_null (info);
 }
@@ -1068,7 +1068,7 @@ test_device_info_lookup_fuzzy (void)
 
   /* major=0x0000 entries have version_mask=0x00 → always fuzzy match.
    * But major=0x0000 needs to match the lookup major. */
-  info = validity_device_info_lookup (0x0000, 0x42);
+  info = fpi_validity_device_info_lookup (0x0000, 0x42);
 
   /* Should match one of the wildcard entries */
   g_assert_nonnull (info);
@@ -1085,7 +1085,7 @@ test_sensor_type_info_lookup (void)
 {
   const ValiditySensorTypeInfo *info;
 
-  info = validity_sensor_type_info_lookup (0x00b5);
+  info = fpi_validity_sensor_type_info_lookup (0x00b5);
 
   g_assert_nonnull (info);
   g_assert_cmpuint (info->sensor_type, ==, 0x00b5);
@@ -1107,7 +1107,7 @@ test_sensor_type_info_lookup_db (void)
 {
   const ValiditySensorTypeInfo *info;
 
-  info = validity_sensor_type_info_lookup (0x00db);
+  info = fpi_validity_sensor_type_info_lookup (0x00db);
 
   g_assert_nonnull (info);
   g_assert_cmpuint (info->bytes_per_line, ==, 0x98);
@@ -1124,7 +1124,7 @@ test_sensor_type_info_lookup_db (void)
 static void
 test_sensor_type_info_lookup_unknown (void)
 {
-  g_assert_null (validity_sensor_type_info_lookup (0xbeef));
+  g_assert_null (fpi_validity_sensor_type_info_lookup (0xbeef));
 }
 
 /* ================================================================
@@ -1139,7 +1139,7 @@ test_factory_bits_cmd_format (void)
   guint8 buf[16];
   gsize len;
 
-  len = validity_sensor_build_factory_bits_cmd (0x0e00, buf, sizeof (buf));
+  len = fpi_validity_sensor_build_factory_bits_cmd (0x0e00, buf, sizeof (buf));
 
   g_assert_cmpuint (len, ==, 9);
   g_assert_cmpuint (buf[0], ==, 0x6f);
@@ -1167,7 +1167,7 @@ test_factory_bits_cmd_buffer_too_small (void)
   guint8 buf[4];
   gsize len;
 
-  len = validity_sensor_build_factory_bits_cmd (0x0e00, buf, sizeof (buf));
+  len = fpi_validity_sensor_build_factory_bits_cmd (0x0e00, buf, sizeof (buf));
 
   g_assert_cmpuint (len, ==, 0);
 }
@@ -1192,15 +1192,15 @@ test_identify_then_lookup (void)
   FP_WRITE_UINT16_LE (&data[4], 0x0013);
   FP_WRITE_UINT16_LE (&data[6], 0x004a);
 
-  g_assert_true (validity_sensor_parse_identify (data, sizeof (data), &ident));
+  g_assert_true (fpi_validity_sensor_parse_identify (data, sizeof (data), &ident));
   g_assert_cmpuint (ident.hw_major, ==, 0x004a);
   g_assert_cmpuint (ident.hw_version, ==, 0x0013);
 
-  dev_info = validity_device_info_lookup (ident.hw_major, ident.hw_version);
+  dev_info = fpi_validity_device_info_lookup (ident.hw_major, ident.hw_version);
   g_assert_nonnull (dev_info);
   g_assert_cmpuint (dev_info->type, ==, 0x00b5);
 
-  type_info = validity_sensor_type_info_lookup (dev_info->type);
+  type_info = fpi_validity_sensor_type_info_lookup (dev_info->type);
   g_assert_nonnull (type_info);
   g_assert_cmpuint (type_info->bytes_per_line, ==, 0x78);
   g_assert_cmpuint (type_info->line_width, ==, 112);
@@ -1216,7 +1216,7 @@ test_sensor_state_lifecycle (void)
 {
   ValiditySensorState state;
 
-  validity_sensor_state_init (&state);
+  fpi_validity_sensor_state_init (&state);
   g_assert_null (state.device_info);
   g_assert_null (state.type_info);
   g_assert_null (state.factory_bits);
@@ -1226,7 +1226,7 @@ test_sensor_state_lifecycle (void)
   state.factory_bits = g_memdup2 ("\x01\x02\x03", 3);
   state.factory_bits_len = 3;
 
-  validity_sensor_state_clear (&state);
+  fpi_validity_sensor_state_clear (&state);
   g_assert_null (state.factory_bits);
   g_assert_cmpuint (state.factory_bits_len, ==, 0);
 }
@@ -1242,7 +1242,7 @@ test_calibration_blob_present (void)
 {
   const ValiditySensorTypeInfo *info;
 
-  info = validity_sensor_type_info_lookup (0x00b5);
+  info = fpi_validity_sensor_type_info_lookup (0x00b5);
   g_assert_nonnull (info);
   g_assert_nonnull (info->calibration_blob);
   g_assert_cmpuint (info->calibration_blob_len, ==, 112);
@@ -1321,7 +1321,7 @@ static void
 test_parse_empty (void)
 {
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (NULL, 0, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (NULL, 0, &result);
 
   /* Empty data (len < 2) → parser returns FALSE */
   g_assert_false (ok);
@@ -1341,7 +1341,7 @@ test_parse_template_block (void)
   g_autofree guint8 *data = wrap_response (block, block_len, &resp_len);
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, resp_len, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, resp_len, &result);
 
   g_assert_true (ok);
   g_assert_nonnull (result.template_data);
@@ -1349,7 +1349,7 @@ test_parse_template_block (void)
   g_assert_null (result.header);
   g_assert_null (result.tid);
 
-  enrollment_update_result_clear (&result);
+  fpi_enrollment_update_result_clear (&result);
 }
 
 /* ================================================================
@@ -1366,7 +1366,7 @@ test_parse_header_block (void)
   g_autofree guint8 *data = wrap_response (block, block_len, &resp_len);
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, resp_len, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, resp_len, &result);
 
   g_assert_true (ok);
   g_assert_nonnull (result.header);
@@ -1375,7 +1375,7 @@ test_parse_header_block (void)
   g_assert_null (result.template_data);
   g_assert_null (result.tid);
 
-  enrollment_update_result_clear (&result);
+  fpi_enrollment_update_result_clear (&result);
 }
 
 /* ================================================================
@@ -1392,7 +1392,7 @@ test_parse_tid_block (void)
   g_autofree guint8 *data = wrap_response (block, block_len, &resp_len);
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, resp_len, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, resp_len, &result);
 
   g_assert_true (ok);
   g_assert_nonnull (result.tid);
@@ -1401,7 +1401,7 @@ test_parse_tid_block (void)
   g_assert_null (result.template_data);
   g_assert_null (result.header);
 
-  enrollment_update_result_clear (&result);
+  fpi_enrollment_update_result_clear (&result);
 }
 
 /* ================================================================
@@ -1434,7 +1434,7 @@ test_parse_multiple_blocks (void)
   g_autofree guint8 *data = wrap_response (blocks, blocks_total, &resp_len);
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, resp_len, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, resp_len, &result);
 
   g_assert_true (ok);
   g_assert_nonnull (result.template_data);
@@ -1444,7 +1444,7 @@ test_parse_multiple_blocks (void)
   g_assert_cmpuint (result.header_len, ==, sizeof (hdr_payload));
   g_assert_cmpuint (result.tid_len, ==, sizeof (tid_payload));
 
-  enrollment_update_result_clear (&result);
+  fpi_enrollment_update_result_clear (&result);
 }
 
 /* ================================================================
@@ -1467,7 +1467,7 @@ test_parse_truncated (void)
   data[7] = 0;
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, sizeof (data), &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, sizeof (data), &result);
 
   g_assert_true (ok);
   /* No fields should be populated since the block was truncated */
@@ -1490,7 +1490,7 @@ test_parse_unknown_tag (void)
   g_autofree guint8 *data = wrap_response (block, block_len, &resp_len);
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, resp_len, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, resp_len, &result);
 
   g_assert_true (ok);
   g_assert_null (result.template_data);
@@ -1513,7 +1513,7 @@ test_result_clear (void)
   result.tid = g_malloc (5);
   result.tid_len = 5;
 
-  enrollment_update_result_clear (&result);
+  fpi_enrollment_update_result_clear (&result);
 
   g_assert_null (result.header);
   g_assert_null (result.template_data);
@@ -1535,7 +1535,7 @@ test_parse_zero_length_payload (void)
   g_autofree guint8 *data = wrap_response (block, block_len, &resp_len);
 
   EnrollmentUpdateResult result;
-  gboolean ok = parse_enrollment_update_response (data, resp_len, &result);
+  gboolean ok = fpi_parse_enrollment_update_response (data, resp_len, &result);
 
   g_assert_true (ok);
   /* Tag 1 with len=0: header should be NULL (len > 0 check in parser) */
@@ -1574,15 +1574,15 @@ test_enroll_progress_short (void)
 
   for (guint frame = 1; frame < 5; frame++)
     {
-      gint target = validity_enroll_progress_target (reported, frame, FALSE);
+      gint target = fpi_validity_enroll_progress_target (reported, frame, FALSE);
 
       g_assert_cmpint (target, ==, (gint) frame);
       reported = report_progress_to (reported, target, &n_reports);
     }
 
   reported = report_progress_to (reported,
-                                 validity_enroll_progress_target (reported, 5,
-                                                                  TRUE),
+                                 fpi_validity_enroll_progress_target (reported, 5,
+                                                                      TRUE),
                                  &n_reports);
 
   g_assert_cmpint (reported, ==, VALIDITY_ENROLL_STAGES);
@@ -1603,7 +1603,7 @@ test_enroll_progress_long (void)
 
   for (guint frame = 1; frame <= 30; frame++)
     {
-      gint target = validity_enroll_progress_target (reported, frame, FALSE);
+      gint target = fpi_validity_enroll_progress_target (reported, frame, FALSE);
 
       g_assert_cmpint (target, <, VALIDITY_ENROLL_STAGES);
       g_assert_cmpint (target, >=, reported);
@@ -1614,8 +1614,8 @@ test_enroll_progress_long (void)
   g_assert_cmpuint (n_reports, ==, VALIDITY_ENROLL_STAGES - 1);
 
   reported = report_progress_to (reported,
-                                 validity_enroll_progress_target (reported, 31,
-                                                                  TRUE),
+                                 fpi_validity_enroll_progress_target (reported, 31,
+                                                                      TRUE),
                                  &n_reports);
 
   g_assert_cmpint (reported, ==, VALIDITY_ENROLL_STAGES);
@@ -1638,16 +1638,16 @@ test_enroll_progress_reconnect (void)
   /* Four frames accepted, then the session is lost */
   for (guint frame = 1; frame <= 4; frame++)
     reported = report_progress_to (reported,
-                                   validity_enroll_progress_target (reported,
-                                                                    frame,
-                                                                    FALSE),
+                                   fpi_validity_enroll_progress_target (reported,
+                                                                        frame,
+                                                                        FALSE),
                                    &n_reports);
   g_assert_cmpint (reported, ==, 4);
 
   /* Restarted enroll: frames 1..4 add nothing, frame 5 moves on */
   for (guint frame = 1; frame <= 4; frame++)
     {
-      gint target = validity_enroll_progress_target (reported, frame, FALSE);
+      gint target = fpi_validity_enroll_progress_target (reported, frame, FALSE);
 
       g_assert_cmpint (target, ==, 4);
       reported = report_progress_to (reported, target, &n_reports);
@@ -1655,15 +1655,15 @@ test_enroll_progress_reconnect (void)
   g_assert_cmpuint (n_reports, ==, 4);
 
   reported = report_progress_to (reported,
-                                 validity_enroll_progress_target (reported, 5,
-                                                                  FALSE),
+                                 fpi_validity_enroll_progress_target (reported, 5,
+                                                                      FALSE),
                                  &n_reports);
   g_assert_cmpint (reported, ==, 5);
 
   /* Chip finishes on the restarted session's 6th frame */
   reported = report_progress_to (reported,
-                                 validity_enroll_progress_target (reported, 6,
-                                                                  TRUE),
+                                 fpi_validity_enroll_progress_target (reported, 6,
+                                                                      TRUE),
                                  &n_reports);
   g_assert_cmpint (reported, ==, VALIDITY_ENROLL_STAGES);
   g_assert_cmpuint (n_reports, ==, VALIDITY_ENROLL_STAGES);
@@ -1721,8 +1721,8 @@ test_fw_info_parse_present (void)
   data[20] = 0x00;
   data[21] = 0x00;
 
-  gboolean ok = validity_fwext_parse_fw_info (data, sizeof (data),
-                                              VCSFW_STATUS_OK, &info);
+  gboolean ok = fpi_validity_fwext_parse_fw_info (data, sizeof (data),
+                                                  VCSFW_STATUS_OK, &info);
 
   g_assert_true (ok);
   g_assert_true (info.loaded);
@@ -1747,8 +1747,8 @@ test_fw_info_parse_absent (void)
 {
   ValidityFwInfo info;
 
-  gboolean ok = validity_fwext_parse_fw_info (NULL, 0,
-                                              VCSFW_STATUS_NO_FW, &info);
+  gboolean ok = fpi_validity_fwext_parse_fw_info (NULL, 0,
+                                                  VCSFW_STATUS_NO_FW, &info);
 
   g_assert_true (ok);
   g_assert_false (info.loaded);
@@ -1771,29 +1771,29 @@ test_fw_info_parse_absent_wire (void)
   ValidityFwInfo info;
   guint16 status = 0xffff;
 
-  g_assert_true (vcsfw_parse_status (no_fw_wire, sizeof (no_fw_wire),
-                                     &status));
+  g_assert_true (fpi_vcsfw_parse_status (no_fw_wire, sizeof (no_fw_wire),
+                                         &status));
   g_assert_cmphex (status, ==, 0x04b0);
   g_assert_cmphex (status, ==, VCSFW_STATUS_NO_FW);
 
-  g_assert_true (validity_fwext_parse_fw_info (no_fw_wire + 2,
-                                               sizeof (no_fw_wire) - 2,
-                                               status, &info));
+  g_assert_true (fpi_validity_fwext_parse_fw_info (no_fw_wire + 2,
+                                                   sizeof (no_fw_wire) - 2,
+                                                   status, &info));
   g_assert_false (info.loaded);
 
   /* The byte-swapped value is just an unknown status, not "no fwext" */
-  g_assert_true (vcsfw_parse_status (swapped_wire, sizeof (swapped_wire),
-                                     &status));
+  g_assert_true (fpi_vcsfw_parse_status (swapped_wire, sizeof (swapped_wire),
+                                         &status));
   g_assert_cmphex (status, ==, 0xb004);
   g_test_expect_message ("libfprint-validity", G_LOG_LEVEL_WARNING,
                          "*unexpected status*");
-  g_assert_false (validity_fwext_parse_fw_info (NULL, 0, status, &info));
+  g_assert_false (fpi_validity_fwext_parse_fw_info (NULL, 0, status, &info));
   g_test_assert_expected_messages ();
   g_assert_false (info.loaded);
 
   /* A reply shorter than the status cannot be decoded */
-  g_assert_false (vcsfw_parse_status (no_fw_wire, 1, &status));
-  g_assert_false (vcsfw_parse_status (NULL, 0, &status));
+  g_assert_false (fpi_vcsfw_parse_status (no_fw_wire, 1, &status));
+  g_assert_false (fpi_vcsfw_parse_status (NULL, 0, &status));
 }
 
 /* ================================================================
@@ -1808,13 +1808,13 @@ test_fw_info_parse_real_a2 (void)
   ValidityFwInfo info;
   guint16 status = 0xffff;
 
-  g_assert_true (vcsfw_parse_status (a2_fwext_info_reply,
-                                     sizeof (a2_fwext_info_reply), &status));
+  g_assert_true (fpi_vcsfw_parse_status (a2_fwext_info_reply,
+                                         sizeof (a2_fwext_info_reply), &status));
   g_assert_cmphex (status, ==, VCSFW_STATUS_OK);
 
-  g_assert_true (validity_fwext_parse_fw_info (a2_fwext_info_reply + 2,
-                                               sizeof (a2_fwext_info_reply) - 2,
-                                               status, &info));
+  g_assert_true (fpi_validity_fwext_parse_fw_info (a2_fwext_info_reply + 2,
+                                                   sizeof (a2_fwext_info_reply) - 2,
+                                                   status, &info));
   g_assert_true (info.loaded);
   g_assert_cmpuint (info.major, ==, 1);
   g_assert_cmpuint (info.minor, ==, 3);
@@ -1842,7 +1842,7 @@ test_fw_info_parse_unknown_status (void)
   g_test_expect_message ("libfprint-validity", G_LOG_LEVEL_WARNING,
                          "*unexpected status*");
 
-  gboolean ok = validity_fwext_parse_fw_info (NULL, 0, 0x9999, &info);
+  gboolean ok = fpi_validity_fwext_parse_fw_info (NULL, 0, 0x9999, &info);
 
   g_test_assert_expected_messages ();
 
@@ -1864,8 +1864,8 @@ test_fw_info_parse_truncated (void)
   g_test_expect_message ("libfprint-validity", G_LOG_LEVEL_WARNING,
                          "*too short*");
 
-  gboolean ok = validity_fwext_parse_fw_info (data, sizeof (data),
-                                              VCSFW_STATUS_OK, &info);
+  gboolean ok = fpi_validity_fwext_parse_fw_info (data, sizeof (data),
+                                                  VCSFW_STATUS_OK, &info);
 
   g_test_assert_expected_messages ();
 
@@ -1914,7 +1914,7 @@ test_xpfwext_file_parse (void)
   g_file_set_contents (path, (gchar *) content, total, &error);
   g_assert_no_error (error);
 
-  gboolean ok = validity_fwext_load_file (path, &fwext, &error);
+  gboolean ok = fpi_validity_fwext_load_file (path, &fwext, &error);
   g_assert_no_error (error);
   g_assert_true (ok);
 
@@ -1928,7 +1928,7 @@ test_xpfwext_file_parse (void)
   for (gsize i = 0; i < sig_len; i++)
     g_assert_cmpuint (fwext.signature[i], ==, 0xAA);
 
-  validity_fwext_file_clear (&fwext);
+  fpi_validity_fwext_file_clear (&fwext);
   g_assert_null (fwext.payload);
   g_assert_cmpuint (fwext.payload_len, ==, 0);
 
@@ -1965,7 +1965,7 @@ test_xpfwext_file_no_delimiter (void)
   g_file_set_contents (path, (gchar *) content, sizeof (content), &error);
   g_assert_no_error (error);
 
-  gboolean ok = validity_fwext_load_file (path, &fwext, &error);
+  gboolean ok = fpi_validity_fwext_load_file (path, &fwext, &error);
   g_assert_false (ok);
   g_assert_nonnull (error);
 
@@ -2003,7 +2003,7 @@ test_xpfwext_file_too_short (void)
   g_file_set_contents (path, (gchar *) content, sizeof (content), &error);
   g_assert_no_error (error);
 
-  gboolean ok = validity_fwext_load_file (path, &fwext, &error);
+  gboolean ok = fpi_validity_fwext_load_file (path, &fwext, &error);
   g_assert_false (ok);
   g_assert_nonnull (error);
 
@@ -2025,8 +2025,8 @@ test_flash_write_cmd_format (void)
   guint8 cmd[13 + sizeof (payload)];
   gsize cmd_len;
 
-  validity_fwext_build_write_flash (2, 0x1000, payload, sizeof (payload),
-                                    cmd, &cmd_len);
+  fpi_validity_fwext_build_write_flash (2, 0x1000, payload, sizeof (payload),
+                                        cmd, &cmd_len);
 
   g_assert_cmpuint (cmd_len, ==, 13 + sizeof (payload));
   g_assert_cmpuint (cmd[0], ==, 0x41);      /* WRITE_FLASH command */
@@ -2066,7 +2066,7 @@ test_fw_sig_cmd_format (void)
 
   memset (sig, 0xBB, sizeof (sig));
 
-  validity_fwext_build_write_fw_sig (2, sig, sizeof (sig), cmd, &cmd_len);
+  fpi_validity_fwext_build_write_fw_sig (2, sig, sizeof (sig), cmd, &cmd_len);
 
   g_assert_cmpuint (cmd_len, ==, 5 + 256);
   g_assert_cmpuint (cmd[0], ==, 0x42);      /* WRITE_FW_SIG command */
@@ -2121,7 +2121,7 @@ test_hw_reg_write_cmd_format (void)
   guint8 cmd[10];
   gsize cmd_len;
 
-  validity_fwext_build_write_hw_reg32 (0x8000205C, 7, cmd, &cmd_len);
+  fpi_validity_fwext_build_write_hw_reg32 (0x8000205C, 7, cmd, &cmd_len);
 
   g_assert_cmpuint (cmd_len, ==, 10);
   g_assert_cmpuint (cmd[0], ==, 0x08);      /* WRITE_HW_REG32 command */
@@ -2148,7 +2148,7 @@ test_hw_reg_read_cmd_format (void)
   guint8 cmd[6];
   gsize cmd_len;
 
-  validity_fwext_build_read_hw_reg32 (0x80002080, cmd, &cmd_len);
+  fpi_validity_fwext_build_read_hw_reg32 (0x80002080, cmd, &cmd_len);
 
   g_assert_cmpuint (cmd_len, ==, 6);
   g_assert_cmpuint (cmd[0], ==, 0x07);      /* READ_HW_REG32 command */
@@ -2169,14 +2169,14 @@ test_hw_reg_read_parse (void)
   guint32 value;
   guint8 data[] = { 0x02, 0x00, 0x00, 0x00 };
 
-  gboolean ok = validity_fwext_parse_read_hw_reg32 (data, sizeof (data),
-                                                    &value);
+  gboolean ok = fpi_validity_fwext_parse_read_hw_reg32 (data, sizeof (data),
+                                                        &value);
 
   g_assert_true (ok);
   g_assert_cmpuint (value, ==, 2);
 
   /* Too short should fail */
-  ok = validity_fwext_parse_read_hw_reg32 (data, 3, &value);
+  ok = fpi_validity_fwext_parse_read_hw_reg32 (data, 3, &value);
   g_assert_false (ok);
 }
 
@@ -2216,20 +2216,20 @@ test_firmware_filename (void)
   for (gsize i = 0; i < G_N_ELEMENTS (cases); i++)
     {
       source = NULL;
-      name = validity_fwext_get_firmware_name (cases[i].vid, cases[i].pid,
-                                               &source);
+      name = fpi_validity_fwext_get_firmware_name (cases[i].vid, cases[i].pid,
+                                                   &source);
       g_assert_cmpstr (name, ==, cases[i].name);
       g_assert_cmpstr (source, ==, cases[i].source);
 
       /* The source is optional */
-      name = validity_fwext_get_firmware_name (cases[i].vid, cases[i].pid,
-                                               NULL);
+      name = fpi_validity_fwext_get_firmware_name (cases[i].vid, cases[i].pid,
+                                                   NULL);
       g_assert_cmpstr (name, ==, cases[i].name);
     }
 
   /* Unknown PID should return NULL, and no source */
   source = "unset";
-  name = validity_fwext_get_firmware_name (0x1234, 0x5678, &source);
+  name = fpi_validity_fwext_get_firmware_name (0x1234, 0x5678, &source);
   g_assert_null (name);
   g_assert_null (source);
 }
@@ -2246,8 +2246,8 @@ test_missing_firmware_file (void)
   g_autoptr(GError) error = NULL;
 
   /* This should fail since firmware files aren't installed in CI */
-  g_autofree gchar *path = validity_fwext_find_firmware (0x06cb, 0x009a,
-                                                         &error);
+  g_autofree gchar *path = fpi_validity_fwext_find_firmware (0x06cb, 0x009a,
+                                                             &error);
 
   /* It either found a file or returned an error — both are valid.
    * In CI, it should be an error. On a real system, it might succeed. */
@@ -2288,12 +2288,12 @@ test_missing_firmware_hint (void)
     {
       g_autoptr(GError) error = NULL;
       const gchar *source = NULL;
-      const gchar *name = validity_fwext_get_firmware_name (devices[i].vid,
-                                                            devices[i].pid,
-                                                            &source);
-      g_autofree gchar *path = validity_fwext_find_firmware (devices[i].vid,
-                                                             devices[i].pid,
-                                                             &error);
+      const gchar *name = fpi_validity_fwext_get_firmware_name (devices[i].vid,
+                                                                devices[i].pid,
+                                                                &source);
+      g_autofree gchar *path = fpi_validity_fwext_find_firmware (devices[i].vid,
+                                                                 devices[i].pid,
+                                                                 &error);
 
       /* Installed on this machine -- nothing to check */
       if (path != NULL)
@@ -2318,8 +2318,8 @@ static void
 test_unsupported_pid_firmware (void)
 {
   g_autoptr(GError) error = NULL;
-  g_autofree gchar *path = validity_fwext_find_firmware (0x1234, 0x5678,
-                                                         &error);
+  g_autofree gchar *path = fpi_validity_fwext_find_firmware (0x1234, 0x5678,
+                                                             &error);
 
   g_assert_null (path);
   g_assert_nonnull (error);
@@ -2340,13 +2340,13 @@ test_fwext_db_write_enable_blob (void)
    * Since no data files are loaded, the accessor should return NULL. */
   FpiDeviceValidity dev = { 0 };
 
-  validity_data_store_init (&dev.device_data);
+  fpi_validity_data_store_init (&dev.device_data);
 
   gsize len;
-  const guint8 *blob = validity_fwext_get_db_write_enable (&dev, &len);
+  const guint8 *blob = fpi_validity_fwext_get_db_write_enable (&dev, &len);
   g_assert_null (blob);
 
-  validity_data_store_free (&dev.device_data);
+  fpi_validity_data_store_free (&dev.device_data);
 }
 
 /* ================================================================
@@ -2360,7 +2360,7 @@ test_reboot_cmd_format (void)
   guint8 cmd[3];
   gsize cmd_len;
 
-  validity_fwext_build_reboot (cmd, &cmd_len);
+  fpi_validity_fwext_build_reboot (cmd, &cmd_len);
 
   g_assert_cmpuint (cmd_len, ==, 3);
   g_assert_cmpuint (cmd[0], ==, 0x05);
@@ -2379,8 +2379,8 @@ test_file_clear_idempotent (void)
   ValidityFwextFile fwext = { 0 };
 
   /* Clear an empty struct — should not crash */
-  validity_fwext_file_clear (&fwext);
-  validity_fwext_file_clear (&fwext);
+  fpi_validity_fwext_file_clear (&fwext);
+  fpi_validity_fwext_file_clear (&fwext);
 
   g_assert_null (fwext.payload);
   g_assert_cmpuint (fwext.payload_len, ==, 0);
@@ -2418,7 +2418,7 @@ test_cmd_get_user_storage (void)
   gsize len;
   const gchar *name = "StgWindsor";
   gsize name_len = strlen (name) + 1; /* includes NUL */
-  g_autofree guint8 *cmd = validity_db_build_cmd_get_user_storage (name, &len);
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_get_user_storage (name, &len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (len, ==, 1 + 2 + 2 + name_len);  /* cmd + dbid + name_len + name */
@@ -2437,7 +2437,7 @@ static void
 test_cmd_get_user_storage_null_name (void)
 {
   gsize len;
-  g_autofree guint8 *cmd = validity_db_build_cmd_get_user_storage (NULL, &len);
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_get_user_storage (NULL, &len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (len, ==, 5);  /* cmd(1) + dbid(2) + name_len(2) */
@@ -2454,7 +2454,7 @@ static void
 test_cmd_get_user (void)
 {
   gsize len;
-  g_autofree guint8 *cmd = validity_db_build_cmd_get_user (0x1234, &len);
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_get_user (0x1234, &len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (len, ==, 7);
@@ -2501,7 +2501,7 @@ test_cmd_new_record (void)
 {
   gsize len;
   guint8 data[] = { 0xAA, 0xBB };
-  g_autofree guint8 *cmd = validity_db_build_cmd_new_record (
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_new_record (
     0x0003, 0x0005, 0x0003, data, sizeof (data), &len);
 
   g_assert_nonnull (cmd);
@@ -2523,7 +2523,7 @@ static void
 test_cmd_del_record (void)
 {
   gsize len;
-  g_autofree guint8 *cmd = validity_db_build_cmd_del_record (0xABCD, &len);
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_del_record (0xABCD, &len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (len, ==, 3);
@@ -2542,7 +2542,7 @@ test_cmd_create_enrollment (void)
   gsize len;
 
   /* Start enrollment */
-  g_autofree guint8 *cmd_start = validity_db_build_cmd_create_enrollment (TRUE, &len);
+  g_autofree guint8 *cmd_start = fpi_validity_db_build_cmd_create_enrollment (TRUE, &len);
 
   g_assert_nonnull (cmd_start);
   g_assert_cmpuint (len, ==, 5);
@@ -2550,7 +2550,7 @@ test_cmd_create_enrollment (void)
   g_assert_cmpuint (FP_READ_UINT32_LE (&cmd_start[1]), ==, 1);
 
   /* End enrollment */
-  g_autofree guint8 *cmd_end = validity_db_build_cmd_create_enrollment (FALSE, &len);
+  g_autofree guint8 *cmd_end = fpi_validity_db_build_cmd_create_enrollment (FALSE, &len);
   g_assert_nonnull (cmd_end);
   g_assert_cmpuint (len, ==, 5);
   g_assert_cmpuint (cmd_end[0], ==, VCSFW_CMD_CREATE_ENROLLMENT);
@@ -2704,7 +2704,7 @@ static void
 test_cmd_call_cleanups (void)
 {
   gsize len;
-  g_autofree guint8 *cmd = validity_db_build_cmd_call_cleanups (&len);
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (len, ==, 1);
@@ -2735,7 +2735,7 @@ test_parse_db_info (void)
   FP_WRITE_UINT16_LE (&data[24], 0x0001);  /* root[0] */
   FP_WRITE_UINT16_LE (&data[26], 0x0003);  /* root[1] */
 
-  g_assert_true (validity_db_parse_info (data, sizeof (data), &info));
+  g_assert_true (fpi_validity_db_parse_info (data, sizeof (data), &info));
 
   g_assert_cmpuint (info.unknown1, ==, 1);
   g_assert_cmpuint (info.unknown0, ==, 0);
@@ -2748,7 +2748,7 @@ test_parse_db_info (void)
   g_assert_cmpuint (info.roots[0], ==, 1);
   g_assert_cmpuint (info.roots[1], ==, 3);
 
-  validity_db_info_clear (&info);
+  fpi_validity_db_info_clear (&info);
 }
 
 /* ================================================================
@@ -2762,7 +2762,7 @@ test_parse_db_info_too_short (void)
   guint8 data[20] = { 0 };
   ValidityDbInfo info;
 
-  g_assert_false (validity_db_parse_info (data, sizeof (data), &info));
+  g_assert_false (fpi_validity_db_parse_info (data, sizeof (data), &info));
 }
 
 /* ================================================================
@@ -2793,7 +2793,7 @@ test_parse_user_storage (void)
   memcpy (&data[16], "StgWindsor", name_len);
 
   ValidityUserStorage storage;
-  g_assert_true (validity_db_parse_user_storage (data, total, &storage));
+  g_assert_true (fpi_validity_db_parse_user_storage (data, total, &storage));
 
   g_assert_cmpuint (storage.dbid, ==, 3);
   g_assert_cmpuint (storage.user_count, ==, 2);
@@ -2804,7 +2804,7 @@ test_parse_user_storage (void)
   g_assert_cmpuint (storage.user_val_sizes[0], ==, 100);
   g_assert_cmpuint (storage.user_val_sizes[1], ==, 200);
 
-  validity_user_storage_clear (&storage);
+  fpi_validity_user_storage_clear (&storage);
 }
 
 /* ================================================================
@@ -2836,7 +2836,7 @@ test_parse_user (void)
   memcpy (&data[16], identity_bytes, sizeof (identity_bytes));
 
   ValidityUser user;
-  g_assert_true (validity_db_parse_user (data, total, &user));
+  g_assert_true (fpi_validity_db_parse_user (data, total, &user));
 
   g_assert_cmpuint (user.dbid, ==, 10);
   g_assert_cmpuint (user.finger_count, ==, 1);
@@ -2850,7 +2850,7 @@ test_parse_user (void)
   g_assert_cmpmem (user.identity, user.identity_len,
                    identity_bytes, sizeof (identity_bytes));
 
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* ================================================================
@@ -2864,7 +2864,7 @@ test_parse_new_record_id (void)
   guint16 record_id;
   guint8 data[] = { 0x42, 0x00 };
 
-  g_assert_true (validity_db_parse_new_record_id (data, sizeof (data), &record_id));
+  g_assert_true (fpi_validity_db_parse_new_record_id (data, sizeof (data), &record_id));
   g_assert_cmpuint (record_id, ==, 0x0042);
 }
 
@@ -2879,7 +2879,7 @@ test_parse_new_record_id_too_short (void)
   guint16 record_id;
   guint8 data[] = { 0x42 };
 
-  g_assert_false (validity_db_parse_new_record_id (data, sizeof (data), &record_id));
+  g_assert_false (fpi_validity_db_parse_new_record_id (data, sizeof (data), &record_id));
 }
 
 /* ================================================================
@@ -2892,7 +2892,7 @@ test_build_identity (void)
 {
   gsize len;
   const gchar *uuid = "550e8400-e29b-41d4-a716-446655440000";
-  g_autofree guint8 *id = validity_db_build_identity (uuid, &len);
+  g_autofree guint8 *id = fpi_validity_db_build_identity (uuid, &len);
 
   g_assert_nonnull (id);
   /* Minimum size enforced */
@@ -2924,7 +2924,7 @@ test_build_finger_data (void)
   gsize len;
   guint8 template[] = { 0x11, 0x22, 0x33 };
   guint8 tid[] = { 0xAA, 0xBB };
-  g_autofree guint8 *fd = validity_db_build_finger_data (
+  g_autofree guint8 *fd = fpi_validity_db_build_finger_data (
     2, template, sizeof (template), tid, sizeof (tid), &len);
 
   g_assert_nonnull (fd);
@@ -2964,13 +2964,13 @@ test_db_write_enable_blob (void)
 {
   FpiDeviceValidity dev = { 0 };
 
-  validity_data_store_init (&dev.device_data);
+  fpi_validity_data_store_init (&dev.device_data);
 
   gsize len;
-  const guint8 *blob = validity_db_get_write_enable_blob (&dev, &len);
+  const guint8 *blob = fpi_validity_db_get_write_enable_blob (&dev, &len);
   g_assert_null (blob);
 
-  validity_data_store_free (&dev.device_data);
+  fpi_validity_data_store_free (&dev.device_data);
 }
 
 /* ================================================================
@@ -2994,7 +2994,7 @@ test_parse_record_value (void)
   memcpy (&data[10], value, sizeof (value));
 
   ValidityDbRecord record;
-  g_assert_true (validity_db_parse_record_value (data, total, &record));
+  g_assert_true (fpi_validity_db_parse_record_value (data, total, &record));
 
   g_assert_cmpuint (record.dbid, ==, 42);
   g_assert_cmpuint (record.type, ==, 8);
@@ -3003,7 +3003,7 @@ test_parse_record_value (void)
   g_assert_cmpuint (record.value_len, ==, sizeof (value));
   g_assert_cmpmem (record.value, record.value_len, value, sizeof (value));
 
-  validity_db_record_clear (&record);
+  fpi_validity_db_record_clear (&record);
 }
 
 /* ================================================================
@@ -3033,7 +3033,7 @@ test_parse_record_children (void)
   FP_WRITE_UINT16_LE (&data[18], 5);     /* child[1].type = USER */
 
   ValidityRecordChildren children;
-  g_assert_true (validity_db_parse_record_children (data, total, &children));
+  g_assert_true (fpi_validity_db_parse_record_children (data, total, &children));
 
   g_assert_cmpuint (children.dbid, ==, 3);
   g_assert_cmpuint (children.type, ==, 4);
@@ -3045,7 +3045,7 @@ test_parse_record_children (void)
   g_assert_cmpuint (children.children[1].dbid, ==, 11);
   g_assert_cmpuint (children.children[1].type, ==, 5);
 
-  validity_record_children_clear (&children);
+  fpi_validity_record_children_clear (&children);
 }
 
 /* ================================================================
@@ -3058,7 +3058,7 @@ test_cmd_enrollment_update (void)
 {
   gsize len;
   guint8 prev[] = { 0xDE, 0xAD, 0xBE, 0xEF };
-  g_autofree guint8 *cmd = validity_db_build_cmd_enrollment_update (
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_enrollment_update (
     prev, sizeof (prev), &len);
 
   g_assert_nonnull (cmd);
@@ -3176,7 +3176,7 @@ test_parse_match_result_valid (void)
     0x00001234, 3, hash, sizeof (hash), &payload_len);
 
   ValidityMatchResult result = { 0 };
-  gboolean ok = validity_parse_match_result (payload, payload_len, &result);
+  gboolean ok = fpi_validity_parse_match_result (payload, payload_len, &result);
 
   g_assert_true (ok);
   g_assert_true (result.matched);
@@ -3186,7 +3186,7 @@ test_parse_match_result_valid (void)
   g_assert_cmpuint (result.hash_len, ==, sizeof (hash));
   g_assert_cmpmem (result.hash, result.hash_len, hash, sizeof (hash));
 
-  validity_match_result_clear (&result);
+  fpi_validity_match_result_clear (&result);
 }
 
 /* ================================================================
@@ -3220,7 +3220,7 @@ test_parse_match_result_multi_tags (void)
   FP_WRITE_UINT16_LE (&buf[0], (guint16) (pos - 2));
 
   ValidityMatchResult result = { 0 };
-  gboolean ok = validity_parse_match_result (buf, pos, &result);
+  gboolean ok = fpi_validity_parse_match_result (buf, pos, &result);
 
   g_assert_true (ok);
   g_assert_true (result.matched);
@@ -3230,7 +3230,7 @@ test_parse_match_result_multi_tags (void)
   g_assert_cmpuint (result.hash_len, ==, 3);
   g_assert_cmpmem (result.hash, result.hash_len, hash, 3);
 
-  validity_match_result_clear (&result);
+  fpi_validity_match_result_clear (&result);
 }
 
 /* ================================================================
@@ -3245,7 +3245,7 @@ test_parse_match_result_empty (void)
   guint8 buf[2] = { 0x00, 0x00 };
 
   ValidityMatchResult result = { 0 };
-  gboolean ok = validity_parse_match_result (buf, sizeof (buf), &result);
+  gboolean ok = fpi_validity_parse_match_result (buf, sizeof (buf), &result);
 
   g_assert_true (ok);
   g_assert_false (result.matched);
@@ -3266,7 +3266,7 @@ test_parse_match_result_truncated (void)
   guint8 buf1[1] = { 0x05 };
   ValidityMatchResult result = { 0 };
 
-  g_assert_false (validity_parse_match_result (buf1, 1, &result));
+  g_assert_false (fpi_validity_parse_match_result (buf1, 1, &result));
 
   /* total_len says 20 but only 6 bytes follow (partial TLV entry) */
   guint8 buf2[8];
@@ -3277,7 +3277,7 @@ test_parse_match_result_truncated (void)
   buf2[7] = 0xFF;
 
   memset (&result, 0, sizeof (result));
-  gboolean ok = validity_parse_match_result (buf2, sizeof (buf2), &result);
+  gboolean ok = fpi_validity_parse_match_result (buf2, sizeof (buf2), &result);
   /* Should return TRUE (parsing succeeded) but matched=FALSE (incomplete entry) */
   g_assert_true (ok);
   g_assert_false (result.matched);
@@ -3307,13 +3307,13 @@ test_parse_match_result_unknown_tags (void)
   FP_WRITE_UINT16_LE (&buf[0], (guint16) (pos - 2));
 
   ValidityMatchResult result = { 0 };
-  gboolean ok = validity_parse_match_result (buf, pos, &result);
+  gboolean ok = fpi_validity_parse_match_result (buf, pos, &result);
 
   g_assert_true (ok);
   g_assert_true (result.matched);
   g_assert_cmpuint (result.user_dbid, ==, 0x0042);
 
-  validity_match_result_clear (&result);
+  fpi_validity_match_result_clear (&result);
 }
 
 /* ================================================================
@@ -3334,7 +3334,7 @@ test_build_identity_null (void)
                          G_LOG_LEVEL_CRITICAL,
                          "*assertion*id_str*failed*");
 
-  guint8 *id = validity_db_build_identity (NULL, &len);
+  guint8 *id = fpi_validity_db_build_identity (NULL, &len);
   g_test_assert_expected_messages ();
 
   g_assert_null (id);
@@ -3351,7 +3351,7 @@ test_build_identity_valid_uuid (void)
 {
   const gchar *uuid = "12345678-1234-5678-1234-567812345678";
   gsize len;
-  g_autofree guint8 *id = validity_db_build_identity (uuid, &len);
+  g_autofree guint8 *id = fpi_validity_db_build_identity (uuid, &len);
 
   g_assert_nonnull (id);
   g_assert_cmpuint (len, >=, VALIDITY_IDENTITY_MIN_SIZE);
@@ -3387,7 +3387,7 @@ make_user_record (ValidityUser  *user,
   memset (user, 0, sizeof (*user));
   user->dbid = dbid;
   if (id)
-    user->identity = validity_db_build_identity (id, &user->identity_len);
+    user->identity = fpi_validity_db_build_identity (id, &user->identity_len);
   user->finger_count = n_fingers;
   if (n_fingers > 0)
     {
@@ -3423,7 +3423,7 @@ make_match (ValidityMatchResult *match,
   memset (match, 0, sizeof (*match));
   match->matched = TRUE;
   match->user_dbid = user_dbid;
-  match->subtype = validity_finger_to_subtype (finger);
+  match->subtype = fpi_validity_finger_to_subtype (finger);
 }
 
 #define ID_LEFT_INDEX "FP1-20260926-2-1A2B3C4D-alice"
@@ -3437,16 +3437,16 @@ test_match_record_same_print (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_LEFT_INDEX,
                                                   ID_LEFT_INDEX);
-  const guint16 subtypes[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 subtypes[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
 
   make_user_record (&user, 10, ID_LEFT_INDEX, subtypes, 1);
   make_match (&match, 10, FP_FINGER_LEFT_INDEX);
 
-  g_assert_true (validity_print_matches_record (print, &match, &user));
+  g_assert_true (fpi_validity_print_matches_record (print, &match, &user));
 
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* Same OS user, different finger: verify of the left index must fail when
@@ -3457,24 +3457,24 @@ test_match_record_same_user_other_finger (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_LEFT_INDEX,
                                                   ID_LEFT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
-  const guint16 both[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX),
-                           validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 both[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX),
+                           fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
 
   /* The right-index enrollment's own record */
   make_user_record (&user, 8, ID_RIGHT_INDEX, right, 1);
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 
   /* A record holding both fingers under the print's identity (as
    * python-validity lays them out): the finger must still agree. */
   make_user_record (&user, 10, ID_LEFT_INDEX, both, 2);
   make_match (&match, 10, FP_FINGER_RIGHT_INDEX);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 }
 
 /* Different user, same finger: identity must agree, not just the finger */
@@ -3484,16 +3484,16 @@ test_match_record_other_user_same_finger (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 subtypes[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 subtypes[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
 
   make_user_record (&user, 12, ID_CAROL_RIGHT_INDEX, subtypes, 1);
   make_match (&match, 12, FP_FINGER_RIGHT_INDEX);
 
-  g_assert_false (validity_print_matches_record (print, &match, &user));
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
 
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* Anything that cannot be correlated is no match */
@@ -3507,8 +3507,8 @@ test_match_record_no_correlation (void)
                                                   NULL);
   g_autoptr(FpPrint) empty_id = make_enrolled_print (device, FP_FINGER_LEFT_INDEX,
                                                      "");
-  const guint16 subtypes[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
-  const guint16 other[] = { validity_finger_to_subtype (FP_FINGER_LEFT_THUMB) };
+  const guint16 subtypes[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 other[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_THUMB) };
   ValidityUser user;
   ValidityUser empty = { 0 };
   ValidityMatchResult match;
@@ -3517,48 +3517,48 @@ test_match_record_no_correlation (void)
   make_match (&match, 10, FP_FINGER_LEFT_INDEX);
 
   /* Print without an id string, or an empty one */
-  g_assert_false (validity_print_matches_record (no_id, &match, &user));
-  g_assert_false (validity_print_matches_record (empty_id, &match, &user));
+  g_assert_false (fpi_validity_print_matches_record (no_id, &match, &user));
+  g_assert_false (fpi_validity_print_matches_record (empty_id, &match, &user));
 
   /* No match reported, or no record read back */
   match.matched = FALSE;
-  g_assert_false (validity_print_matches_record (print, &match, &user));
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
   match.matched = TRUE;
-  g_assert_false (validity_print_matches_record (print, &match, &empty));
-  g_assert_false (validity_print_matches_record (print, &match, NULL));
-  g_assert_false (validity_print_matches_record (NULL, &match, &user));
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &empty));
+  g_assert_false (fpi_validity_print_matches_record (print, &match, NULL));
+  g_assert_false (fpi_validity_print_matches_record (NULL, &match, &user));
 
   /* Record read back is not the one the chip named */
   make_match (&match, 11, FP_FINGER_LEFT_INDEX);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
   make_match (&match, 0x1000a, FP_FINGER_LEFT_INDEX);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 
   /* Identity that is only a prefix, or longer */
   make_match (&match, 10, FP_FINGER_LEFT_INDEX);
   make_user_record (&user, 10, "FP1-20260926-2-1A2B3C4D", subtypes, 1);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
   make_user_record (&user, 10, ID_LEFT_INDEX "x", subtypes, 1);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 
   /* Record without an identity */
   make_user_record (&user, 10, NULL, subtypes, 1);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 
   /* Record whose finger table lacks the matched subtype */
   make_user_record (&user, 10, ID_LEFT_INDEX, other, 1);
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 
   /* Chip reported no subtype (tag 3 absent) */
   make_user_record (&user, 10, ID_LEFT_INDEX, subtypes, 1);
   match.subtype = 0;
-  g_assert_false (validity_print_matches_record (print, &match, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_print_matches_record (print, &match, &user));
+  fpi_validity_user_clear (&user);
 }
 
 /* Identify returns the gallery print the match belongs to */
@@ -3567,8 +3567,8 @@ test_gallery_match_correlates (void)
 {
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(GPtrArray) gallery = g_ptr_array_new_with_free_func (g_object_unref);
-  const guint16 left[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 left[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
   FpPrint *p_left, *p_right;
@@ -3580,13 +3580,13 @@ test_gallery_match_correlates (void)
 
   make_user_record (&user, 8, ID_RIGHT_INDEX, right, 1);
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
-  g_assert_true (validity_find_gallery_match (gallery, &match, &user) == p_right);
-  validity_user_clear (&user);
+  g_assert_true (fpi_validity_find_gallery_match (gallery, &match, &user) == p_right);
+  fpi_validity_user_clear (&user);
 
   make_user_record (&user, 10, ID_LEFT_INDEX, left, 1);
   make_match (&match, 10, FP_FINGER_LEFT_INDEX);
-  g_assert_true (validity_find_gallery_match (gallery, &match, &user) == p_left);
-  validity_user_clear (&user);
+  g_assert_true (fpi_validity_find_gallery_match (gallery, &match, &user) == p_left);
+  fpi_validity_user_clear (&user);
 }
 
 /* A match that corresponds to no gallery print is no match: no fallback to
@@ -3596,8 +3596,8 @@ test_gallery_match_no_fallback (void)
 {
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(GPtrArray) gallery = g_ptr_array_new_with_free_func (g_object_unref);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
-  const guint16 ring[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_RING) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 ring[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_RING) };
   ValidityUser user;
   ValidityMatchResult match;
 
@@ -3609,14 +3609,14 @@ test_gallery_match_no_fallback (void)
   /* Another user's right index: same finger as a gallery print */
   make_user_record (&user, 12, ID_CAROL_RIGHT_INDEX, right, 1);
   make_match (&match, 12, FP_FINGER_RIGHT_INDEX);
-  g_assert_null (validity_find_gallery_match (gallery, &match, &user));
-  validity_user_clear (&user);
+  g_assert_null (fpi_validity_find_gallery_match (gallery, &match, &user));
+  fpi_validity_user_clear (&user);
 
   /* A finger in no gallery print */
   make_user_record (&user, 14, "FP1-20260901-9-01020304-alice", ring, 1);
   make_match (&match, 14, FP_FINGER_RIGHT_RING);
-  g_assert_null (validity_find_gallery_match (gallery, &match, &user));
-  validity_user_clear (&user);
+  g_assert_null (fpi_validity_find_gallery_match (gallery, &match, &user));
+  fpi_validity_user_clear (&user);
 }
 
 /* NULL or empty gallery */
@@ -3624,17 +3624,17 @@ static void
 test_gallery_match_empty (void)
 {
   g_autoptr(GPtrArray) empty = g_ptr_array_new_with_free_func (g_object_unref);
-  const guint16 subtypes[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 subtypes[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
 
   make_user_record (&user, 10, ID_LEFT_INDEX, subtypes, 1);
   make_match (&match, 10, FP_FINGER_LEFT_INDEX);
 
-  g_assert_null (validity_find_gallery_match (NULL, &match, &user));
-  g_assert_null (validity_find_gallery_match (empty, &match, &user));
+  g_assert_null (fpi_validity_find_gallery_match (NULL, &match, &user));
+  g_assert_null (fpi_validity_find_gallery_match (empty, &match, &user));
 
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* The record identity round-trips through the builder, and malformed
@@ -3648,21 +3648,21 @@ test_user_get_id (void)
   const guint8 truncated[] = { 3, 0, 0, 0, 10, 0, 0, 0, 'a', 'b' };
   const guint8 zero_len[] = { 3, 0, 0, 0, 0, 0, 0, 0 };
 
-  g_assert_false (validity_db_user_get_id (&user, &id, &id_len));
+  g_assert_false (fpi_validity_db_user_get_id (&user, &id, &id_len));
 
-  user.identity = validity_db_build_identity (ID_LEFT_INDEX, &user.identity_len);
-  g_assert_true (validity_db_user_get_id (&user, &id, &id_len));
+  user.identity = fpi_validity_db_build_identity (ID_LEFT_INDEX, &user.identity_len);
+  g_assert_true (fpi_validity_db_user_get_id (&user, &id, &id_len));
   g_assert_cmpmem (id, id_len, ID_LEFT_INDEX, strlen (ID_LEFT_INDEX));
   g_clear_pointer (&user.identity, g_free);
 
   user.identity = g_memdup2 (truncated, sizeof (truncated));
   user.identity_len = sizeof (truncated);
-  g_assert_false (validity_db_user_get_id (&user, &id, &id_len));
+  g_assert_false (fpi_validity_db_user_get_id (&user, &id, &id_len));
   g_clear_pointer (&user.identity, g_free);
 
   user.identity = g_memdup2 (zero_len, sizeof (zero_len));
   user.identity_len = sizeof (zero_len);
-  g_assert_false (validity_db_user_get_id (&user, &id, &id_len));
+  g_assert_false (fpi_validity_db_user_get_id (&user, &id, &id_len));
   g_clear_pointer (&user.identity, g_free);
 }
 
@@ -3681,30 +3681,30 @@ test_match_decide_verify (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
-  const guint16 left[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 left[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
 
   make_user_record (&user, 8, ID_RIGHT_INDEX, right, 1);
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
                    ==, FPI_MATCH_SUCCESS);
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 
   /* Another user's same finger */
   make_user_record (&user, 12, ID_CAROL_RIGHT_INDEX, right, 1);
   make_match (&match, 12, FP_FINGER_RIGHT_INDEX);
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
                    ==, FPI_MATCH_FAIL);
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 
   /* The same user's other finger */
   make_user_record (&user, 10, ID_LEFT_INDEX, left, 1);
   make_match (&match, 10, FP_FINGER_LEFT_INDEX);
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
                    ==, FPI_MATCH_FAIL);
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* Identify returns the gallery print the match belongs to, or nothing */
@@ -3713,7 +3713,7 @@ test_match_decide_identify (void)
 {
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(GPtrArray) gallery = g_ptr_array_new_with_free_func (g_object_unref);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
   FpPrint *p_left, *p_right;
@@ -3727,25 +3727,25 @@ test_match_decide_identify (void)
   make_user_record (&user, 8, ID_RIGHT_INDEX, right, 1);
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
   found = p_left;
-  g_assert_cmpint (validity_match_decide (TRUE, NULL, gallery, &match, &user, &found),
+  g_assert_cmpint (fpi_validity_match_decide (TRUE, NULL, gallery, &match, &user, &found),
                    ==, FPI_MATCH_SUCCESS);
   g_assert_true (found == p_right);
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 
   /* Another user's right index: no gallery print, not gallery[0] */
   make_user_record (&user, 12, ID_CAROL_RIGHT_INDEX, right, 1);
   make_match (&match, 12, FP_FINGER_RIGHT_INDEX);
   found = p_left;
-  g_assert_cmpint (validity_match_decide (TRUE, NULL, gallery, &match, &user, &found),
+  g_assert_cmpint (fpi_validity_match_decide (TRUE, NULL, gallery, &match, &user, &found),
                    ==, FPI_MATCH_FAIL);
   g_assert_null (found);
 
   /* No match at all also clears the out parameter */
   found = p_left;
-  g_assert_cmpint (validity_match_decide (TRUE, NULL, gallery, NULL, &user, &found),
+  g_assert_cmpint (fpi_validity_match_decide (TRUE, NULL, gallery, NULL, &user, &found),
                    ==, FPI_MATCH_FAIL);
   g_assert_null (found);
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* Verify and identify each use their own input: a verify is not decided
@@ -3757,7 +3757,7 @@ test_match_decide_mode (void)
   g_autoptr(GPtrArray) gallery = g_ptr_array_new_with_free_func (g_object_unref);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser user;
   ValidityMatchResult match;
   FpPrint *found = NULL;
@@ -3766,14 +3766,14 @@ test_match_decide_mode (void)
   make_user_record (&user, 8, ID_RIGHT_INDEX, right, 1);
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
 
-  g_assert_cmpint (validity_match_decide (FALSE, NULL, gallery, &match, &user, &found),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, NULL, gallery, &match, &user, &found),
                    ==, FPI_MATCH_FAIL);
   g_assert_null (found);
-  g_assert_cmpint (validity_match_decide (TRUE, print, NULL, &match, &user, &found),
+  g_assert_cmpint (fpi_validity_match_decide (TRUE, print, NULL, &match, &user, &found),
                    ==, FPI_MATCH_FAIL);
   g_assert_null (found);
 
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* A match whose user record was not read back, or no match, is no match */
@@ -3784,7 +3784,7 @@ test_match_decide_no_readback (void)
   g_autoptr(GPtrArray) gallery = g_ptr_array_new_with_free_func (g_object_unref);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser empty = { 0 };
   ValidityUser user;
   ValidityMatchResult match;
@@ -3793,20 +3793,20 @@ test_match_decide_no_readback (void)
   g_ptr_array_add (gallery, g_object_ref (print));
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
 
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match, &empty, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match, &empty, NULL),
                    ==, FPI_MATCH_FAIL);
-  g_assert_cmpint (validity_match_decide (TRUE, NULL, gallery, &match, &empty, &found),
+  g_assert_cmpint (fpi_validity_match_decide (TRUE, NULL, gallery, &match, &empty, &found),
                    ==, FPI_MATCH_FAIL);
   g_assert_null (found);
 
   /* A record that would correlate, but no match from the chip */
   make_user_record (&user, 8, ID_RIGHT_INDEX, right, 1);
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, NULL, &user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, NULL, &user, NULL),
                    ==, FPI_MATCH_FAIL);
   match.matched = FALSE;
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match, &user, NULL),
                    ==, FPI_MATCH_FAIL);
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* The user record to read back comes only from a 0x60 response that
@@ -3822,17 +3822,17 @@ test_match_user_to_read (void)
   g_autofree guint8 *wide = NULL;
   gsize wide_len;
 
-  g_assert_true (validity_match_user_to_read (ok, len, &dbid));
+  g_assert_true (fpi_validity_match_user_to_read (ok, len, &dbid));
   g_assert_cmpuint (dbid, ==, 10);
 
   dbid = 0xbeef;
   wide = build_match_payload (0x1000a, 2, hash, sizeof (hash), &wide_len);
-  g_assert_false (validity_match_user_to_read (wide, wide_len, &dbid));
-  g_assert_false (validity_match_user_to_read (empty_dict, sizeof (empty_dict),
-                                               &dbid));
-  g_assert_false (validity_match_user_to_read (ok, 1, &dbid));
-  g_assert_false (validity_match_user_to_read (ok, 0, &dbid));
-  g_assert_false (validity_match_user_to_read (NULL, 0, &dbid));
+  g_assert_false (fpi_validity_match_user_to_read (wide, wide_len, &dbid));
+  g_assert_false (fpi_validity_match_user_to_read (empty_dict, sizeof (empty_dict),
+                                                   &dbid));
+  g_assert_false (fpi_validity_match_user_to_read (ok, 1, &dbid));
+  g_assert_false (fpi_validity_match_user_to_read (ok, 0, &dbid));
+  g_assert_false (fpi_validity_match_user_to_read (NULL, 0, &dbid));
   g_assert_cmpuint (dbid, ==, 0xbeef);
 }
 
@@ -3845,7 +3845,7 @@ test_verify_clear_match_state (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   guint8 hash[] = { 0xAA };
   /* Only the plain fields the reset touches are used; the GObject part of
    * the instance is never initialised or accessed. */
@@ -3857,11 +3857,11 @@ test_verify_clear_match_state (void)
                                          &self->bulk_data_len);
   make_user_record (&self->verify_match_user, 8, ID_RIGHT_INDEX, right, 1);
   make_match (&match, 8, FP_FINGER_RIGHT_INDEX);
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match,
-                                          &self->verify_match_user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match,
+                                              &self->verify_match_user, NULL),
                    ==, FPI_MATCH_SUCCESS);
 
-  validity_verify_clear_match_state (self);
+  fpi_validity_verify_clear_match_state (self);
 
   g_assert_null (self->bulk_data);
   g_assert_cmpuint (self->bulk_data_len, ==, 0);
@@ -3871,8 +3871,8 @@ test_verify_clear_match_state (void)
   g_assert_cmpuint (self->verify_match_user.finger_count, ==, 0);
 
   /* This attempt: the chip names the same record, get_user fails */
-  g_assert_cmpint (validity_match_decide (FALSE, print, NULL, &match,
-                                          &self->verify_match_user, NULL),
+  g_assert_cmpint (fpi_validity_match_decide (FALSE, print, NULL, &match,
+                                              &self->verify_match_user, NULL),
                    ==, FPI_MATCH_FAIL);
 }
 
@@ -3895,7 +3895,7 @@ delete_scan (FpPrint            *print,
              gboolean           *leaves_empty)
 {
   for (guint i = 0; i < n_users; i++)
-    if (validity_delete_find_finger (print, &users[i], finger_dbid, leaves_empty))
+    if (fpi_validity_delete_find_finger (print, &users[i], finger_dbid, leaves_empty))
       return &users[i];
 
   return NULL;
@@ -3909,8 +3909,8 @@ test_delete_find_finger_own_record (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
-  const guint16 left[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 left[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
   ValidityUser users[3];
   const ValidityUser *chosen;
   guint16 finger_dbid = 0xffff;
@@ -3927,7 +3927,7 @@ test_delete_find_finger_own_record (void)
   g_assert_true (leaves_empty);
 
   for (guint i = 0; i < G_N_ELEMENTS (users); i++)
-    validity_user_clear (&users[i]);
+    fpi_validity_user_clear (&users[i]);
 }
 
 /* A record holding several fingers under the print's identity (as
@@ -3939,20 +3939,20 @@ test_delete_find_finger_multi_finger_record (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 both[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX),
-                           validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 both[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX),
+                           fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
   ValidityUser user;
   guint16 finger_dbid = 0xffff;
   gboolean leaves_empty = TRUE;
 
   make_user_record (&user, 20, ID_RIGHT_INDEX, both, 2);
 
-  g_assert_true (validity_delete_find_finger (print, &user, &finger_dbid,
-                                              &leaves_empty));
+  g_assert_true (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                  &leaves_empty));
   g_assert_cmpuint (finger_dbid, ==, 22);
   g_assert_false (leaves_empty);
 
-  validity_user_clear (&user);
+  fpi_validity_user_clear (&user);
 }
 
 /* The same finger in another user's record is never chosen, even when it is
@@ -3963,8 +3963,8 @@ test_delete_find_finger_other_user (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_RIGHT_INDEX,
                                                   ID_RIGHT_INDEX);
-  const guint16 right[] = { validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
-  const guint16 left[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 right[] = { fpi_validity_finger_to_subtype (FP_FINGER_RIGHT_INDEX) };
+  const guint16 left[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
   ValidityUser users[2];
   guint16 finger_dbid = 0xffff;
   gboolean leaves_empty = FALSE;
@@ -3978,7 +3978,7 @@ test_delete_find_finger_other_user (void)
   g_assert_false (leaves_empty);
 
   for (guint i = 0; i < G_N_ELEMENTS (users); i++)
-    validity_user_clear (&users[i]);
+    fpi_validity_user_clear (&users[i]);
 }
 
 /* Anything that cannot be correlated selects nothing */
@@ -3994,8 +3994,8 @@ test_delete_find_finger_no_correlation (void)
                                                      "");
   g_autoptr(FpPrint) no_finger = make_enrolled_print (device, FP_FINGER_UNKNOWN,
                                                       ID_LEFT_INDEX);
-  const guint16 subtypes[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
-  const guint16 other[] = { validity_finger_to_subtype (FP_FINGER_LEFT_THUMB) };
+  const guint16 subtypes[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 other[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_THUMB) };
   const guint16 zero[] = { 0 };
   /* A python-validity record: identity type 3 with a binary Windows SID */
   const guint8 sid_identity[] = { 3, 0, 0, 0, 12, 0, 0, 0,
@@ -4006,53 +4006,53 @@ test_delete_find_finger_no_correlation (void)
   gboolean leaves_empty = FALSE;
 
   make_user_record (&user, 10, ID_LEFT_INDEX, subtypes, 1);
-  g_assert_false (validity_delete_find_finger (no_id, &user, &finger_dbid,
-                                               &leaves_empty));
-  g_assert_false (validity_delete_find_finger (empty_id, &user, &finger_dbid,
-                                               &leaves_empty));
-  g_assert_false (validity_delete_find_finger (NULL, &user, &finger_dbid,
-                                               &leaves_empty));
-  g_assert_false (validity_delete_find_finger (print, NULL, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (no_id, &user, &finger_dbid,
+                                                   &leaves_empty));
+  g_assert_false (fpi_validity_delete_find_finger (empty_id, &user, &finger_dbid,
+                                                   &leaves_empty));
+  g_assert_false (fpi_validity_delete_find_finger (NULL, &user, &finger_dbid,
+                                                   &leaves_empty));
+  g_assert_false (fpi_validity_delete_find_finger (print, NULL, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
 
   /* Identity that is only a prefix, or longer */
   make_user_record (&user, 10, "FP1-20260926-2-1A2B3C4D", subtypes, 1);
-  g_assert_false (validity_delete_find_finger (print, &user, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
   make_user_record (&user, 10, ID_LEFT_INDEX "x", subtypes, 1);
-  g_assert_false (validity_delete_find_finger (print, &user, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
 
   /* Record without an identity, or with a python-validity SID */
   make_user_record (&user, 10, NULL, subtypes, 1);
-  g_assert_false (validity_delete_find_finger (print, &user, &finger_dbid,
-                                               &leaves_empty));
+  g_assert_false (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                   &leaves_empty));
   user.identity = g_memdup2 (sid_identity, sizeof (sid_identity));
   user.identity_len = sizeof (sid_identity);
-  g_assert_false (validity_delete_find_finger (print, &user, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
 
   /* The print's record, but without the print's finger */
   make_user_record (&user, 10, ID_LEFT_INDEX, other, 1);
-  g_assert_false (validity_delete_find_finger (print, &user, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
 
   /* The print's record with no fingers at all */
   make_user_record (&user, 10, ID_LEFT_INDEX, NULL, 0);
-  g_assert_false (validity_delete_find_finger (print, &user, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (print, &user, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
 
   /* A print with no finger set does not match a subtype-0 entry */
   make_user_record (&user, 10, ID_LEFT_INDEX, zero, 1);
-  g_assert_false (validity_delete_find_finger (no_finger, &user, &finger_dbid,
-                                               &leaves_empty));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_find_finger (no_finger, &user, &finger_dbid,
+                                                   &leaves_empty));
+  fpi_validity_user_clear (&user);
 
   g_assert_cmpuint (finger_dbid, ==, 0xffff);
   g_assert_false (leaves_empty);
@@ -4066,28 +4066,28 @@ test_delete_owner_is_empty (void)
   g_autoptr(FpDevice) device = g_object_new (FPI_TYPE_DEVICE_FAKE, NULL);
   g_autoptr(FpPrint) print = make_enrolled_print (device, FP_FINGER_LEFT_INDEX,
                                                   ID_LEFT_INDEX);
-  const guint16 subtypes[] = { validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
+  const guint16 subtypes[] = { fpi_validity_finger_to_subtype (FP_FINGER_LEFT_INDEX) };
   ValidityUser user;
 
   make_user_record (&user, 10, ID_LEFT_INDEX, NULL, 0);
-  g_assert_true (validity_delete_owner_is_empty (print, 10, &user));
-  g_assert_false (validity_delete_owner_is_empty (print, 11, &user));
-  g_assert_false (validity_delete_owner_is_empty (NULL, 10, &user));
-  g_assert_false (validity_delete_owner_is_empty (print, 10, NULL));
-  validity_user_clear (&user);
+  g_assert_true (fpi_validity_delete_owner_is_empty (print, 10, &user));
+  g_assert_false (fpi_validity_delete_owner_is_empty (print, 11, &user));
+  g_assert_false (fpi_validity_delete_owner_is_empty (NULL, 10, &user));
+  g_assert_false (fpi_validity_delete_owner_is_empty (print, 10, NULL));
+  fpi_validity_user_clear (&user);
 
   /* Still holds a finger (the delete did not take, or another finger) */
   make_user_record (&user, 10, ID_LEFT_INDEX, subtypes, 1);
-  g_assert_false (validity_delete_owner_is_empty (print, 10, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_owner_is_empty (print, 10, &user));
+  fpi_validity_user_clear (&user);
 
   /* Another identity, or none */
   make_user_record (&user, 10, ID_CAROL_RIGHT_INDEX, NULL, 0);
-  g_assert_false (validity_delete_owner_is_empty (print, 10, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_owner_is_empty (print, 10, &user));
+  fpi_validity_user_clear (&user);
   make_user_record (&user, 10, NULL, NULL, 0);
-  g_assert_false (validity_delete_owner_is_empty (print, 10, &user));
-  validity_user_clear (&user);
+  g_assert_false (fpi_validity_delete_owner_is_empty (print, 10, &user));
+  fpi_validity_user_clear (&user);
 }
 
 /* ================================================================
@@ -4122,7 +4122,7 @@ static void
 test_del_record_format (void)
 {
   gsize len;
-  g_autofree guint8 *cmd = validity_db_build_cmd_del_record (0x4321, &len);
+  g_autofree guint8 *cmd = fpi_validity_db_build_cmd_del_record (0x4321, &len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (len, ==, 3);
@@ -4208,39 +4208,39 @@ test_classify_error (void)
   GError *e;
 
   /* No error */
-  g_assert_cmpint (validity_classify_error (NULL, TRUE), ==, VALIDITY_ERR_NONE);
-  g_assert_cmpint (validity_classify_error (NULL, FALSE), ==, VALIDITY_ERR_NONE);
+  g_assert_cmpint (fpi_validity_classify_error (NULL, TRUE), ==, VALIDITY_ERR_NONE);
+  g_assert_cmpint (fpi_validity_classify_error (NULL, FALSE), ==, VALIDITY_ERR_NONE);
 
   /* Cancellation (either domain) -- never recover */
   e = g_error_new (G_IO_ERROR, G_IO_ERROR_CANCELLED, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_CANCELLED);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_CANCELLED);
   g_error_free (e);
   e = g_error_new (G_USB_DEVICE_ERROR, G_USB_DEVICE_ERROR_CANCELLED, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_CANCELLED);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_CANCELLED);
   g_error_free (e);
 
   /* Already-mapped removed */
   e = g_error_new (FP_DEVICE_ERROR, FP_DEVICE_ERROR_REMOVED, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_REMOVED);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_REMOVED);
   g_error_free (e);
 
   /* NO_DEVICE: liveness decides session-lost (alive) vs removed (gone) */
   e = g_error_new (G_USB_DEVICE_ERROR, G_USB_DEVICE_ERROR_NO_DEVICE, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_SESSION_LOST);
-  g_assert_cmpint (validity_classify_error (e, FALSE), ==, VALIDITY_ERR_REMOVED);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_SESSION_LOST);
+  g_assert_cmpint (fpi_validity_classify_error (e, FALSE), ==, VALIDITY_ERR_REMOVED);
   g_error_free (e);
 
   /* Transient transport blips -> pipe stall */
   e = g_error_new (G_USB_DEVICE_ERROR, G_USB_DEVICE_ERROR_IO, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_PIPE_STALL);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_PIPE_STALL);
   g_error_free (e);
   e = g_error_new (G_USB_DEVICE_ERROR, G_USB_DEVICE_ERROR_TIMED_OUT, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_PIPE_STALL);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_PIPE_STALL);
   g_error_free (e);
 
   /* Anything else -> fatal (incl. a plain PROTO, until TLS-alert detection) */
   e = g_error_new (FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO, "x");
-  g_assert_cmpint (validity_classify_error (e, TRUE), ==, VALIDITY_ERR_FATAL);
+  g_assert_cmpint (fpi_validity_classify_error (e, TRUE), ==, VALIDITY_ERR_FATAL);
   g_error_free (e);
 }
 
@@ -4260,7 +4260,7 @@ test_match_result_clear (void)
   result.hash = g_memdup2 ((guint8[]){0x01, 0x02}, 2);
   result.hash_len = 2;
 
-  validity_match_result_clear (&result);
+  fpi_validity_match_result_clear (&result);
 
   g_assert_false (result.matched);
   g_assert_cmpuint (result.user_dbid, ==, 0);
@@ -4285,10 +4285,10 @@ test_prf_deterministic (void)
   guint8 output1[48];
   guint8 output2[48];
 
-  validity_tls_prf (secret, sizeof (secret), seed, sizeof (seed),
-                    output1, sizeof (output1));
-  validity_tls_prf (secret, sizeof (secret), seed, sizeof (seed),
-                    output2, sizeof (output2));
+  fpi_validity_tls_prf (secret, sizeof (secret), seed, sizeof (seed),
+                        output1, sizeof (output1));
+  fpi_validity_tls_prf (secret, sizeof (secret), seed, sizeof (seed),
+                        output2, sizeof (output2));
 
   g_assert_cmpmem (output1, sizeof (output1), output2, sizeof (output2));
 }
@@ -4309,8 +4309,8 @@ test_prf_output_length (void)
   memset (secret, 0xAB, sizeof (secret));
   memset (seed, 0xCD, sizeof (seed));
 
-  validity_tls_prf (secret, sizeof (secret), seed, sizeof (seed),
-                    output, sizeof (output));
+  fpi_validity_tls_prf (secret, sizeof (secret), seed, sizeof (seed),
+                        output, sizeof (output));
 
   /* PRF output should not be all zeros */
   gboolean all_zero = TRUE;
@@ -4336,8 +4336,8 @@ test_prf_short_output (void)
   guint8 output_short[16];
   guint8 output_long[48];
 
-  validity_tls_prf (secret, 1, seed, 1, output_short, sizeof (output_short));
-  validity_tls_prf (secret, 1, seed, 1, output_long, sizeof (output_long));
+  fpi_validity_tls_prf (secret, 1, seed, 1, output_short, sizeof (output_short));
+  fpi_validity_tls_prf (secret, 1, seed, 1, output_long, sizeof (output_long));
 
   /* First 16 bytes should match */
   g_assert_cmpmem (output_short, 16, output_long, 16);
@@ -4351,7 +4351,7 @@ test_encrypt_decrypt_roundtrip (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   /* Set up encryption/decryption keys (same for roundtrip test) */
   memset (tls.encryption_key, 0x42, TLS_AES_KEY_SIZE);
@@ -4361,21 +4361,21 @@ test_encrypt_decrypt_roundtrip (void)
   gsize pt_len = sizeof (plaintext);
 
   gsize enc_len;
-  guint8 *encrypted = validity_tls_encrypt (&tls, plaintext, pt_len, &enc_len);
+  guint8 *encrypted = fpi_validity_tls_encrypt (&tls, plaintext, pt_len, &enc_len);
   g_assert_nonnull (encrypted);
   g_assert_cmpuint (enc_len, >, pt_len); /* IV + padded ciphertext */
 
   GError *error = NULL;
   gsize dec_len;
-  guint8 *decrypted = validity_tls_decrypt (&tls, encrypted, enc_len,
-                                            &dec_len, &error);
+  guint8 *decrypted = fpi_validity_tls_decrypt (&tls, encrypted, enc_len,
+                                                &dec_len, &error);
   g_assert_no_error (error);
   g_assert_nonnull (decrypted);
   g_assert_cmpmem (plaintext, pt_len, decrypted, dec_len);
 
   g_free (encrypted);
   g_free (decrypted);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -4386,7 +4386,7 @@ test_encrypt_block_aligned (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   memset (tls.encryption_key, 0x55, TLS_AES_KEY_SIZE);
   memset (tls.decryption_key, 0x55, TLS_AES_KEY_SIZE);
@@ -4396,15 +4396,15 @@ test_encrypt_block_aligned (void)
   memset (plaintext, 0xAA, 16);
 
   gsize enc_len;
-  guint8 *encrypted = validity_tls_encrypt (&tls, plaintext, 16, &enc_len);
+  guint8 *encrypted = fpi_validity_tls_encrypt (&tls, plaintext, 16, &enc_len);
   g_assert_nonnull (encrypted);
   /* Should be IV(16) + 32 bytes (16 data + 16 padding since pad=0x0f*16) */
   g_assert_cmpuint (enc_len, ==, 16 + 32);
 
   GError *error = NULL;
   gsize dec_len;
-  guint8 *decrypted = validity_tls_decrypt (&tls, encrypted, enc_len,
-                                            &dec_len, &error);
+  guint8 *decrypted = fpi_validity_tls_decrypt (&tls, encrypted, enc_len,
+                                                &dec_len, &error);
   g_assert_no_error (error);
   g_assert_nonnull (decrypted);
   g_assert_cmpuint (dec_len, ==, 16);
@@ -4412,7 +4412,7 @@ test_encrypt_block_aligned (void)
 
   g_free (encrypted);
   g_free (decrypted);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -4423,7 +4423,7 @@ test_decrypt_invalid (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   memset (tls.decryption_key, 0x55, TLS_AES_KEY_SIZE);
 
@@ -4433,14 +4433,14 @@ test_decrypt_invalid (void)
 
   GError *error = NULL;
   gsize dec_len;
-  guint8 *decrypted = validity_tls_decrypt (&tls, short_data,
-                                            sizeof (short_data),
-                                            &dec_len, &error);
+  guint8 *decrypted = fpi_validity_tls_decrypt (&tls, short_data,
+                                                sizeof (short_data),
+                                                &dec_len, &error);
   g_assert_null (decrypted);
   g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
   g_clear_error (&error);
 
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -4465,13 +4465,13 @@ test_psk_derivation (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
   tls.password = test_password;
   tls.password_len = sizeof (test_password);
   tls.gwk_sign = test_gwk_sign;
   tls.gwk_sign_len = sizeof (test_gwk_sign);
 
-  validity_tls_derive_psk_from_identity (&tls, "Test Product", "SN0001");
+  fpi_validity_tls_derive_psk_from_identity (&tls, "Test Product", "SN0001");
 
   /* PSK keys should not be all zeros */
   gboolean all_zero = TRUE;
@@ -4496,7 +4496,7 @@ test_psk_derivation (void)
     }
   g_assert_false (all_zero);
 
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -4507,8 +4507,8 @@ test_psk_deterministic (void)
 {
   ValidityTlsState tls1, tls2;
 
-  validity_tls_init (&tls1);
-  validity_tls_init (&tls2);
+  fpi_validity_tls_init (&tls1);
+  fpi_validity_tls_init (&tls2);
   tls1.password = test_password;
   tls1.password_len = sizeof (test_password);
   tls1.gwk_sign = test_gwk_sign;
@@ -4518,16 +4518,16 @@ test_psk_deterministic (void)
   tls2.gwk_sign = test_gwk_sign;
   tls2.gwk_sign_len = sizeof (test_gwk_sign);
 
-  validity_tls_derive_psk_from_identity (&tls1, "Test Product", "SN0001");
-  validity_tls_derive_psk_from_identity (&tls2, "Test Product", "SN0001");
+  fpi_validity_tls_derive_psk_from_identity (&tls1, "Test Product", "SN0001");
+  fpi_validity_tls_derive_psk_from_identity (&tls2, "Test Product", "SN0001");
 
   g_assert_cmpmem (tls1.psk_encryption_key, TLS_AES_KEY_SIZE,
                    tls2.psk_encryption_key, TLS_AES_KEY_SIZE);
   g_assert_cmpmem (tls1.psk_validation_key, TLS_AES_KEY_SIZE,
                    tls2.psk_validation_key, TLS_AES_KEY_SIZE);
 
-  validity_tls_free (&tls1);
-  validity_tls_free (&tls2);
+  fpi_validity_tls_free (&tls1);
+  fpi_validity_tls_free (&tls2);
 }
 
 /* ================================================================
@@ -4591,7 +4591,7 @@ static const guint8 kat_hp_noserial_val[32] = {
 static void
 psk_kat_init (ValidityTlsState *tls)
 {
-  validity_tls_init (tls);
+  fpi_validity_tls_init (tls);
   tls->password = test_password;
   tls->password_len = sizeof (test_password);
   tls->gwk_sign = test_gwk_sign;
@@ -4615,20 +4615,20 @@ test_psk_python_validity_kat (void)
   ValidityTlsState tls;
 
   psk_kat_init (&tls);
-  validity_tls_derive_psk_from_identity (&tls, "VirtualBox", "0");
+  fpi_validity_tls_derive_psk_from_identity (&tls, "VirtualBox", "0");
   check_psk (&tls, kat_vbox_enc, kat_vbox_val);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 
   psk_kat_init (&tls);
-  validity_tls_derive_psk_from_identity (&tls, KAT_HP_NAME, KAT_HP_SERIAL);
+  fpi_validity_tls_derive_psk_from_identity (&tls, KAT_HP_NAME, KAT_HP_SERIAL);
   check_psk (&tls, kat_hp_enc, kat_hp_val);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 
   /* An empty serial is part of the identity, not a fallback */
   psk_kat_init (&tls);
-  validity_tls_derive_psk_from_identity (&tls, KAT_HP_NAME, "");
+  fpi_validity_tls_derive_psk_from_identity (&tls, KAT_HP_NAME, "");
   check_psk (&tls, kat_hp_noserial_enc, kat_hp_noserial_val);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -4676,10 +4676,10 @@ check_psk_from_files (const gchar  *name_content,   /* NULL: no file */
 
   ValidityTlsState tls;
   psk_kat_init (&tls);
-  validity_tls_derive_psk_from_files (&tls, name_path, serial_path);
+  fpi_validity_tls_derive_psk_from_files (&tls, name_path, serial_path);
   g_test_assert_expected_messages ();
   check_psk (&tls, want_enc, want_val);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 
   g_remove (name_path);
   g_remove (serial_path);
@@ -4737,7 +4737,7 @@ dev_check_serial_refused (const gchar *path,
   g_autoptr(GError) error = NULL;
   gchar *serial = (gchar *) "unset";
 
-  g_assert_false (validity_tls_read_serial_file (path, &serial, &error));
+  g_assert_false (fpi_validity_tls_read_serial_file (path, &serial, &error));
   g_assert_null (serial);
   g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL);
   if (want_in_message)
@@ -4772,10 +4772,10 @@ test_dev_serial_file_read (void)
   {
     g_autoptr(GError) error = NULL;
 
-    g_assert_true (validity_tls_read_serial_file (good, &serial, &error));
+    g_assert_true (fpi_validity_tls_read_serial_file (good, &serial, &error));
     g_assert_no_error (error);
     g_assert_cmpstr (serial, ==, "SECRET-SN 01");
-    validity_tls_free_secret_string (serial);
+    fpi_validity_tls_free_secret_string (serial);
     serial = NULL;
   }
   /* Read-only for the owner is fine too */
@@ -4783,8 +4783,8 @@ test_dev_serial_file_read (void)
   {
     g_autoptr(GError) error = NULL;
 
-    g_assert_true (validity_tls_read_serial_file (good, &serial, &error));
-    validity_tls_free_secret_string (serial);
+    g_assert_true (fpi_validity_tls_read_serial_file (good, &serial, &error));
+    fpi_validity_tls_free_secret_string (serial);
     serial = NULL;
   }
 
@@ -4836,9 +4836,9 @@ test_dev_serial_file_read (void)
                                              -1, 0600);
     g_autoptr(GError) error = NULL;
 
-    g_assert_true (validity_tls_read_serial_file (lead, &serial, &error));
+    g_assert_true (fpi_validity_tls_read_serial_file (lead, &serial, &error));
     g_assert_cmpstr (serial, ==, "SECRET-SN 02");
-    validity_tls_free_secret_string (serial);
+    fpi_validity_tls_free_secret_string (serial);
     serial = NULL;
     g_remove (lead);
   }
@@ -4880,11 +4880,11 @@ test_dev_serial_file_psk (void)
     ValidityTlsState tls;
 
     psk_kat_init (&tls);
-    g_assert_true (validity_tls_derive_psk_with_serial_file (&tls, name,
-                                                             serial, &error));
+    g_assert_true (fpi_validity_tls_derive_psk_with_serial_file (&tls, name,
+                                                                 serial, &error));
     g_assert_no_error (error);
     check_psk (&tls, kat_hp_enc, kat_hp_val);
-    validity_tls_free (&tls);
+    fpi_validity_tls_free (&tls);
   }
 
   {
@@ -4892,10 +4892,10 @@ test_dev_serial_file_psk (void)
     ValidityTlsState tls;
 
     psk_kat_init (&tls);
-    g_assert_false (validity_tls_derive_psk_with_serial_file (&tls, missing,
-                                                              serial, &error));
+    g_assert_false (fpi_validity_tls_derive_psk_with_serial_file (&tls, missing,
+                                                                  serial, &error));
     g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL);
-    validity_tls_free (&tls);
+    fpi_validity_tls_free (&tls);
   }
 
   {
@@ -4903,12 +4903,12 @@ test_dev_serial_file_psk (void)
     ValidityTlsState tls;
 
     psk_kat_init (&tls);
-    g_assert_false (validity_tls_derive_psk_with_serial_file (&tls, name,
-                                                              open_serial,
-                                                              &error));
+    g_assert_false (fpi_validity_tls_derive_psk_with_serial_file (&tls, name,
+                                                                  open_serial,
+                                                                  &error));
     g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL);
     g_assert_null (strstr (error->message, KAT_HP_SERIAL));
-    validity_tls_free (&tls);
+    fpi_validity_tls_free (&tls);
   }
 
   g_remove (name);
@@ -4962,7 +4962,7 @@ test_dev_data_dir (void)
 
   /* Resolution */
   {
-    g_auto(GStrv) paths = validity_data_resolve_search_paths (NULL, NULL);
+    g_auto(GStrv) paths = fpi_validity_data_resolve_search_paths (NULL, NULL);
 
     g_assert_cmpuint (g_strv_length (paths), ==,
                       g_strv_length ((gchar **) validity_data_search_paths));
@@ -4970,7 +4970,7 @@ test_dev_data_dir (void)
       g_assert_cmpstr (paths[i], ==, validity_data_search_paths[i]);
   }
   {
-    g_auto(GStrv) paths = validity_data_resolve_search_paths (dir, NULL);
+    g_auto(GStrv) paths = fpi_validity_data_resolve_search_paths (dir, NULL);
 
     g_assert_cmpuint (g_strv_length (paths), ==, 1);
     g_assert_cmpstr (paths[0], ==, dir);
@@ -4983,7 +4983,7 @@ test_dev_data_dir (void)
       {
         g_autoptr(GError) error = NULL;
 
-        g_assert_null (validity_data_resolve_search_paths (bad[i], &error));
+        g_assert_null (fpi_validity_data_resolve_search_paths (bad[i], &error));
         g_assert_error (error, FP_DEVICE_ERROR,
                         FP_DEVICE_ERROR_DATA_NOT_FOUND);
       }
@@ -4992,33 +4992,33 @@ test_dev_data_dir (void)
   g_setenv (VALIDITY_DATA_DIR_ENV, dir, TRUE);
   g_setenv (VALIDITY_DMI_SERIAL_FILE_ENV, file, TRUE);
 
-  if (validity_dev_overrides_built ())
+  if (fpi_validity_dev_overrides_built ())
     {
       ValidityDataStore store;
       gsize len = 0;
       const guint8 *data;
 
-      g_assert_cmpstr (validity_data_dev_dir (), ==, dir);
-      g_assert_cmpstr (validity_tls_dev_serial_file (), ==, file);
+      g_assert_cmpstr (fpi_validity_data_dev_dir (), ==, dir);
+      g_assert_cmpstr (fpi_validity_tls_dev_serial_file (), ==, file);
 
       /* The device blobs load from the override directory */
-      validity_data_store_init (&store);
+      fpi_validity_data_store_init (&store);
       {
         g_autoptr(GError) error = NULL;
 
-        g_assert_true (validity_data_load_device (&store, 0x06cb, 0x00a2,
-                                                  &error));
+        g_assert_true (fpi_validity_data_load_device (&store, 0x06cb, 0x00a2,
+                                                      &error));
         g_assert_no_error (error);
       }
-      data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+      data = fpi_validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
       g_assert_cmpmem (data, len, init_payload, sizeof (init_payload));
-      g_assert_null (validity_data_get (&store, VALIDITY_DATA_RESET));
+      g_assert_null (fpi_validity_data_get (&store, VALIDITY_DATA_RESET));
 
       /* No fallback to the system paths for missing files */
       {
         g_autoptr(GError) error = NULL;
 
-        g_assert_false (validity_data_load_common (&store, &error));
+        g_assert_false (fpi_validity_data_load_common (&store, &error));
         g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND);
         g_assert_nonnull (strstr (error->message, dir));
         g_assert_null (strstr (error->message, "/usr/share/libfprint"));
@@ -5026,24 +5026,24 @@ test_dev_data_dir (void)
       {
         g_autoptr(GError) error = NULL;
 
-        g_assert_false (validity_data_load_device (&store, 0x06cb, 0x009a,
-                                                   &error));
+        g_assert_false (fpi_validity_data_load_device (&store, 0x06cb, 0x009a,
+                                                       &error));
         g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND);
         g_assert_null (strstr (error->message, "/usr/share/libfprint"));
       }
-      validity_data_store_free (&store);
+      fpi_validity_data_store_free (&store);
 
       /* A bad value fails closed */
       g_setenv (VALIDITY_DATA_DIR_ENV, "relative", TRUE);
-      validity_data_store_init (&store);
+      fpi_validity_data_store_init (&store);
       {
         g_autoptr(GError) error = NULL;
 
-        g_assert_false (validity_data_load_device (&store, 0x06cb, 0x00a2,
-                                                   &error));
+        g_assert_false (fpi_validity_data_load_device (&store, 0x06cb, 0x00a2,
+                                                       &error));
         g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND);
       }
-      validity_data_store_free (&store);
+      fpi_validity_data_store_free (&store);
 
       /* The serial override is used, and fails closed (not 0600) */
       {
@@ -5052,29 +5052,29 @@ test_dev_data_dir (void)
 
         g_assert_cmpint (g_chmod (file, 0644), ==, 0);
         psk_kat_init (&tls);
-        g_assert_false (validity_tls_derive_psk_checked (&tls, &error));
+        g_assert_false (fpi_validity_tls_derive_psk_checked (&tls, &error));
         g_assert_nonnull (error);
-        validity_tls_free (&tls);
+        fpi_validity_tls_free (&tls);
       }
     }
   else
     {
       ValidityDataStore store;
 
-      g_assert_null (validity_data_dev_dir ());
-      g_assert_null (validity_tls_dev_serial_file ());
+      g_assert_null (fpi_validity_data_dev_dir ());
+      g_assert_null (fpi_validity_tls_dev_serial_file ());
 
       /* The override directory is never searched */
-      validity_data_store_init (&store);
+      fpi_validity_data_store_init (&store);
       {
         g_autoptr(GError) error = NULL;
 
-        if (!validity_data_load_device (&store, 0x06cb, 0x00a2, &error))
+        if (!fpi_validity_data_load_device (&store, 0x06cb, 0x00a2, &error))
           g_assert_null (strstr (error->message, dir));
         else
           g_assert_null (strstr (dir, "/usr/share"));
       }
-      validity_data_store_free (&store);
+      fpi_validity_data_store_free (&store);
     }
 
   g_unsetenv (VALIDITY_DATA_DIR_ENV);
@@ -5094,22 +5094,22 @@ test_flash_parse_empty (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   GError *error = NULL;
   guint8 empty_flash[] = { 0xFF, 0xFF, 0x00, 0x00 }; /* end block */
 
   /* Flash with only end marker → missing keys */
-  gboolean result = validity_tls_parse_flash (&tls, empty_flash,
-                                              sizeof (empty_flash),
-                                              &error);
+  gboolean result = fpi_validity_tls_parse_flash (&tls, empty_flash,
+                                                  sizeof (empty_flash),
+                                                  &error);
   g_assert_false (result);
   g_assert_nonnull (error);
   g_assert_false (tls.keys_loaded);
   g_assert_false (tls.priv_key_mismatch);
 
   g_clear_error (&error);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -5120,21 +5120,21 @@ test_flash_parse_truncated (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   GError *error = NULL;
   guint8 truncated[] = { 0x03, 0x00, 0xFF, 0x00 }; /* cert block w/ impossibly large size */
 
-  gboolean result = validity_tls_parse_flash (&tls, truncated,
-                                              sizeof (truncated),
-                                              &error);
+  gboolean result = fpi_validity_tls_parse_flash (&tls, truncated,
+                                                  sizeof (truncated),
+                                                  &error);
   /* Should fail due to block size exceeding remaining data */
   g_assert_false (result);
   g_assert_nonnull (error);
   g_assert_false (tls.priv_key_mismatch);
   g_clear_error (&error);
 
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -5147,8 +5147,8 @@ test_init_free (void)
 
   for (int i = 0; i < 10; i++)
     {
-      validity_tls_init (&tls);
-      validity_tls_free (&tls);
+      fpi_validity_tls_init (&tls);
+      fpi_validity_tls_free (&tls);
     }
 }
 
@@ -5160,10 +5160,10 @@ test_build_client_hello (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   gsize out_len;
-  guint8 *hello = validity_tls_build_client_hello (&tls, &out_len);
+  guint8 *hello = fpi_validity_tls_build_client_hello (&tls, &out_len);
 
   g_assert_nonnull (hello);
   g_assert_cmpuint (out_len, >, 4 + 5); /* prefix(4) + record header(5) minimum */
@@ -5192,7 +5192,7 @@ test_build_client_hello (void)
   g_assert_true (has_random);
 
   g_free (hello);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -5203,16 +5203,16 @@ test_unwrap_invalid (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   GError *error = NULL;
   gsize out_len;
 
   /* Short data → truncated record header */
   guint8 short_data[] = { 0x17, 0x03 };
-  guint8 *result = validity_tls_unwrap_response (&tls, short_data,
-                                                 sizeof (short_data),
-                                                 &out_len, &error);
+  guint8 *result = fpi_validity_tls_unwrap_response (&tls, short_data,
+                                                     sizeof (short_data),
+                                                     &out_len, &error);
   g_assert_null (result);
   g_assert_nonnull (error);
   g_clear_error (&error);
@@ -5221,14 +5221,14 @@ test_unwrap_invalid (void)
   guint8 app_early[] = { 0x17, 0x03, 0x03, 0x00, 0x10,
                          0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                          0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
-  result = validity_tls_unwrap_response (&tls, app_early,
-                                         sizeof (app_early),
-                                         &out_len, &error);
+  result = fpi_validity_tls_unwrap_response (&tls, app_early,
+                                             sizeof (app_early),
+                                             &out_len, &error);
   g_assert_null (result);
   g_assert_nonnull (error);
   g_clear_error (&error);
 
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -5242,8 +5242,8 @@ test_flash_parse_needs_psk (void)
 {
   ValidityTlsState tls_with_psk, tls_no_psk;
 
-  validity_tls_init (&tls_with_psk);
-  validity_tls_init (&tls_no_psk);
+  fpi_validity_tls_init (&tls_with_psk);
+  fpi_validity_tls_init (&tls_no_psk);
 
   /* Set up key material before PSK derivation */
   tls_with_psk.password = test_password;
@@ -5252,8 +5252,8 @@ test_flash_parse_needs_psk (void)
   tls_with_psk.gwk_sign_len = sizeof (test_gwk_sign);
 
   /* Derive PSK so we can build a valid encrypted private key block */
-  validity_tls_derive_psk_from_identity (&tls_with_psk, "Test Product",
-                                         "SN0001");
+  fpi_validity_tls_derive_psk_from_identity (&tls_with_psk, "Test Product",
+                                             "SN0001");
 
   /* Build a realistic flash image with a cert block + encrypted privkey block.
    * We use a minimal cert (just 16 bytes of dummy data) and a privkey block
@@ -5333,9 +5333,9 @@ test_flash_parse_needs_psk (void)
 
   /* TEST: Without PSK, parse_flash must fail on the privkey block */
   GError *error = NULL;
-  gboolean result = validity_tls_parse_flash (&tls_no_psk,
-                                              flash->data, flash->len,
-                                              &error);
+  gboolean result = fpi_validity_tls_parse_flash (&tls_no_psk,
+                                                  flash->data, flash->len,
+                                                  &error);
   g_assert_false (result);
   g_assert_nonnull (error);
   /* Should fail with HMAC-related error since PSK is all zeros, and flag
@@ -5346,8 +5346,8 @@ test_flash_parse_needs_psk (void)
   /* With the PSK the block was wrapped under, the HMAC passes: not a
    * mismatch. (The dummy key then fails to unpad, so the parse still
    * fails, for a different reason.) */
-  result = validity_tls_parse_flash (&tls_with_psk, flash->data, flash->len,
-                                     &error);
+  result = fpi_validity_tls_parse_flash (&tls_with_psk, flash->data, flash->len,
+                                         &error);
   g_assert_false (result);
   g_assert_nonnull (error);
   g_assert_false (tls_with_psk.priv_key_mismatch);
@@ -5359,16 +5359,16 @@ test_flash_parse_needs_psk (void)
           TLS_AES_KEY_SIZE);
   memcpy (tls_no_psk.psk_validation_key, tls_with_psk.psk_validation_key,
           TLS_AES_KEY_SIZE);
-  result = validity_tls_parse_flash (&tls_no_psk, flash->data, flash->len,
-                                     &error);
+  result = fpi_validity_tls_parse_flash (&tls_no_psk, flash->data, flash->len,
+                                         &error);
   g_assert_false (result);
   g_assert_false (tls_no_psk.priv_key_mismatch);
   g_clear_error (&error);
 
   g_byte_array_free (flash, TRUE);
   g_free (priv_block);
-  validity_tls_free (&tls_with_psk);
-  validity_tls_free (&tls_no_psk);
+  fpi_validity_tls_free (&tls_with_psk);
+  fpi_validity_tls_free (&tls_no_psk);
 }
 
 /* ================================================================
@@ -5445,15 +5445,15 @@ test_flash_response_header (void)
 
   /* Parsing the correctly unwrapped data should succeed (end marker only = no keys) */
   ValidityTlsState tls;
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
   GError *error = NULL;
-  gboolean result = validity_tls_parse_flash (&tls, payload, payload_len, &error);
+  gboolean result = fpi_validity_tls_parse_flash (&tls, payload, payload_len, &error);
   /* Expected: fails because no keys, but NOT because of corrupt block headers */
   g_assert_false (result);
   g_assert_nonnull (error);
   g_assert_true (g_str_has_prefix (error->message, "TLS flash: incomplete key data"));
   g_clear_error (&error);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 
   /* The raw response (with 6-byte header) differs from the unwrapped
    * payload — passing it directly to parse_flash would corrupt block
@@ -5502,18 +5502,18 @@ test_server_hello_rejects_vcsfw_prefix (void)
 
   /* Test 1: parse_server_hello with raw TLS — should succeed */
   ValidityTlsState tls;
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
   tls.handshake_hash = g_checksum_new (G_CHECKSUM_SHA256);
   GError *error = NULL;
 
-  gboolean result = validity_tls_parse_server_hello (&tls, raw_tls,
-                                                     raw_tls_len, &error);
+  gboolean result = fpi_validity_tls_parse_server_hello (&tls, raw_tls,
+                                                         raw_tls_len, &error);
   g_assert_no_error (error);
   g_assert_true (result);
   /* Verify server_random was properly extracted */
   g_assert_cmpint (tls.server_random[0], ==, 0x01);
   g_assert_cmpint (tls.server_random[31], ==, 0x20);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 
   /* Test 2: Prepend a 2-byte VCSFW status (0x0000) — simulates what
    * vcsfw_cmd_send's cmd_receive_cb would have already STRIPPED.
@@ -5526,11 +5526,11 @@ test_server_hello_rejects_vcsfw_prefix (void)
   prefixed[1] = 0x00;  /* VCSFW status hi */
   memcpy (prefixed + 2, raw_tls, raw_tls_len);
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
   tls.handshake_hash = g_checksum_new (G_CHECKSUM_SHA256);
 
-  result = validity_tls_parse_server_hello (&tls, prefixed, prefixed_len,
-                                            &error);
+  result = fpi_validity_tls_parse_server_hello (&tls, prefixed, prefixed_len,
+                                                &error);
   /* With the 2-byte prefix, the first "record" starts at byte 0:
    * content_type=0x00 is NOT TLS_CONTENT_HANDSHAKE (0x16), so the
    * parser treats it as unknown content and either fails or skips it,
@@ -5543,7 +5543,7 @@ test_server_hello_rejects_vcsfw_prefix (void)
       g_assert_false (random_ok);
     }
   g_clear_error (&error);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 
   g_free (raw_tls);
   g_free (prefixed);
@@ -5560,10 +5560,10 @@ test_client_hello_tls_prefix (void)
 {
   ValidityTlsState tls;
 
-  validity_tls_init (&tls);
+  fpi_validity_tls_init (&tls);
 
   gsize out_len;
-  guint8 *hello = validity_tls_build_client_hello (&tls, &out_len);
+  guint8 *hello = fpi_validity_tls_build_client_hello (&tls, &out_len);
   g_assert_nonnull (hello);
 
   /* Must start with 0x44 0x00 0x00 0x00 (TLS prefix, not VCSFW) */
@@ -5588,7 +5588,7 @@ test_client_hello_tls_prefix (void)
   g_assert_cmpint (hello[0], !=, VCSFW_CMD_GET_FW_INFO);
 
   g_free (hello);
-  validity_tls_free (&tls);
+  fpi_validity_tls_free (&tls);
 }
 
 /* ================================================================
@@ -5626,8 +5626,8 @@ test_parse_flash_info_valid (void)
   ValidityFlashIcParams ic;
   guint16 num_partitions;
 
-  gboolean ok = validity_pair_parse_flash_info (data, sizeof (data),
-                                                &ic, &num_partitions);
+  gboolean ok = fpi_validity_pair_parse_flash_info (data, sizeof (data),
+                                                    &ic, &num_partitions);
   g_assert_true (ok);
   g_assert_cmpuint (num_partitions, ==, 5);
   g_assert_cmpuint (ic.size, ==, 0x1000 * 0x0100);
@@ -5654,8 +5654,8 @@ test_parse_flash_info_needs_pairing (void)
   ValidityFlashIcParams ic;
   guint16 num_partitions;
 
-  gboolean ok = validity_pair_parse_flash_info (data, sizeof (data),
-                                                &ic, &num_partitions);
+  gboolean ok = fpi_validity_pair_parse_flash_info (data, sizeof (data),
+                                                    &ic, &num_partitions);
   g_assert_true (ok);
   g_assert_cmpuint (num_partitions, ==, 0);
 }
@@ -5673,8 +5673,8 @@ test_parse_flash_info_too_short (void)
   ValidityFlashIcParams ic;
   guint16 num_partitions;
 
-  gboolean ok = validity_pair_parse_flash_info (data, sizeof (data),
-                                                &ic, &num_partitions);
+  gboolean ok = fpi_validity_pair_parse_flash_info (data, sizeof (data),
+                                                    &ic, &num_partitions);
   g_assert_false (ok);
 }
 
@@ -5737,7 +5737,7 @@ test_pair_classify_keys_present (void)
                                                     G_N_ELEMENTS (windows_order),
                                                     &len);
 
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, len),
                    ==, VALIDITY_TLS_FLASH_KEYS_PRESENT);
 }
 
@@ -5749,7 +5749,7 @@ test_pair_classify_own_image (void)
   guint8 priv_blob[161], server_cert[184], ecdh_blob[400], ca_cert[420];
   gsize flash_len;
 
-  validity_pair_state_init (&state);
+  fpi_validity_pair_state_init (&state);
   memset (priv_blob, 0x02, sizeof (priv_blob));
   memset (server_cert, 0x33, sizeof (server_cert));
   memset (ecdh_blob, 0x66, sizeof (ecdh_blob));
@@ -5761,9 +5761,9 @@ test_pair_classify_own_image (void)
   state.ecdh_blob = ecdh_blob;
   state.ecdh_blob_len = sizeof (ecdh_blob);
 
-  g_autofree guint8 *flash = validity_pair_build_tls_flash (&state, ca_cert,
-                                                            sizeof (ca_cert),
-                                                            &flash_len);
+  g_autofree guint8 *flash = fpi_validity_pair_build_tls_flash (&state, ca_cert,
+                                                                sizeof (ca_cert),
+                                                                &flash_len);
   g_assert_nonnull (flash);
 
   g_autofree guint8 *rsp = g_malloc (TEST_TLS_FLASH_RSP_HDR + flash_len);
@@ -5771,15 +5771,15 @@ test_pair_classify_own_image (void)
   FP_WRITE_UINT16_LE (rsp + 4, 0);
   memcpy (rsp + TEST_TLS_FLASH_RSP_HDR, flash, flash_len);
 
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp,
-                                                     TEST_TLS_FLASH_RSP_HDR + flash_len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp,
+                                                         TEST_TLS_FLASH_RSP_HDR + flash_len),
                    ==, VALIDITY_TLS_FLASH_KEYS_PRESENT);
 
   /* Stack buffers: do not let state_free touch them */
   state.priv_blob = NULL;
   state.server_cert = NULL;
   state.ecdh_blob = NULL;
-  validity_pair_state_free (&state);
+  fpi_validity_pair_state_free (&state);
 }
 
 static void
@@ -5789,7 +5789,7 @@ test_pair_classify_blank (void)
   g_autofree guint8 *rsp = make_tls_flash_response (NULL, 0, &len);
 
   /* Erased partition: the first block header is the 0xFFFF end marker */
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, len),
                    ==, VALIDITY_TLS_FLASH_BLANK);
 }
 
@@ -5806,9 +5806,9 @@ test_pair_classify_partial (void)
                                                      G_N_ELEMENTS (no_keys),
                                                      &len);
 
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp1, len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp1, len),
                    ==, VALIDITY_TLS_FLASH_PARTIAL);
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp2, len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp2, len),
                    ==, VALIDITY_TLS_FLASH_PARTIAL);
 }
 
@@ -5822,21 +5822,21 @@ test_pair_classify_unreadable (void)
   guint8 hdr_only[TEST_TLS_FLASH_RSP_HDR] = { 0 };
 
   /* A non-OK status wins, even over data that looks paired */
-  g_assert_cmpint (validity_pair_classify_tls_flash (0x0404, rsp, len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (0x0404, rsp, len),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
 
   /* No payload, or not even the 6-byte response header */
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, NULL, 0),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, NULL, 0),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, NULL, len),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, NULL, len),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp,
-                                                     TEST_TLS_FLASH_RSP_HDR - 1),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp,
+                                                         TEST_TLS_FLASH_RSP_HDR - 1),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
 
   /* Header only, declaring no data: no end marker was seen, so not blank */
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, hdr_only,
-                                                     sizeof (hdr_only)),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, hdr_only,
+                                                         sizeof (hdr_only)),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
 }
 
@@ -5851,26 +5851,26 @@ test_pair_classify_truncated (void)
 
   /* Short read of an erased partition: declares 4096 bytes, delivers 100.
    * Must not count as blank, since most of the partition was never read. */
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, blank,
-                                                     TEST_TLS_FLASH_RSP_HDR + 100),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, blank,
+                                                         TEST_TLS_FLASH_RSP_HDR + 100),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
 
   /* Short read that ends inside block 6: not partial, unreadable */
   cut = TEST_TLS_FLASH_BLOCK_OFF (2) + TLS_FLASH_BLOCK_HEADER_SIZE + 10;
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, cut),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, cut),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
 
   /* Same cut, but the size field agrees with what arrived, so it is block 6
    * itself that runs past the end of the data */
   FP_WRITE_UINT32_LE (rsp, cut - TEST_TLS_FLASH_RSP_HDR);
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, cut),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, cut),
                    ==, VALIDITY_TLS_FLASH_UNREADABLE);
 
   /* A short read that still holds all three keys is KEYS_PRESENT, as it was
    * before; the TLS parse checks the blocks themselves afterwards. */
   FP_WRITE_UINT32_LE (rsp, TEST_TLS_FLASH_SIZE);
   cut = TEST_TLS_FLASH_BLOCK_OFF (3) + 8;
-  g_assert_cmpint (validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, cut),
+  g_assert_cmpint (fpi_validity_pair_classify_tls_flash (VCSFW_STATUS_OK, rsp, cut),
                    ==, VALIDITY_TLS_FLASH_KEYS_PRESENT);
 }
 
@@ -5890,9 +5890,9 @@ test_pair_decide (void)
    * ignored. */
   for (gsize i = 0; i < G_N_ELEMENTS (classes); i++)
     {
-      g_assert_cmpint (validity_pair_decide (0, classes[i], FALSE),
+      g_assert_cmpint (fpi_validity_pair_decide (0, classes[i], FALSE),
                        ==, VALIDITY_PAIR_PROVISION);
-      g_assert_cmpint (validity_pair_decide (0, classes[i], TRUE),
+      g_assert_cmpint (fpi_validity_pair_decide (0, classes[i], TRUE),
                        ==, VALIDITY_PAIR_REFUSE_RECOVERY);
     }
 
@@ -5904,23 +5904,23 @@ test_pair_decide (void)
         {
           guint16 n = partitioned[p];
 
-          g_assert_cmpint (validity_pair_decide (n, VALIDITY_TLS_FLASH_KEYS_PRESENT,
-                                                 check_only),
+          g_assert_cmpint (fpi_validity_pair_decide (n, VALIDITY_TLS_FLASH_KEYS_PRESENT,
+                                                     check_only),
                            ==, VALIDITY_PAIR_NOT_NEEDED);
-          g_assert_cmpint (validity_pair_decide (n, VALIDITY_TLS_FLASH_BLANK,
-                                                 check_only),
+          g_assert_cmpint (fpi_validity_pair_decide (n, VALIDITY_TLS_FLASH_BLANK,
+                                                     check_only),
                            ==, VALIDITY_PAIR_REFUSE_BLANK);
-          g_assert_cmpint (validity_pair_decide (n, VALIDITY_TLS_FLASH_PARTIAL,
-                                                 check_only),
+          g_assert_cmpint (fpi_validity_pair_decide (n, VALIDITY_TLS_FLASH_PARTIAL,
+                                                     check_only),
                            ==, VALIDITY_PAIR_REFUSE_PARTIAL);
-          g_assert_cmpint (validity_pair_decide (n, VALIDITY_TLS_FLASH_UNREADABLE,
-                                                 check_only),
+          g_assert_cmpint (fpi_validity_pair_decide (n, VALIDITY_TLS_FLASH_UNREADABLE,
+                                                     check_only),
                            ==, VALIDITY_PAIR_REFUSE_UNREADABLE);
         }
     }
 
   /* An out-of-range class on a partitioned sensor is refused, not paired */
-  g_assert_cmpint (validity_pair_decide (5, (ValidityTlsFlashClass) 99, FALSE),
+  g_assert_cmpint (fpi_validity_pair_decide (5, (ValidityTlsFlashClass) 99, FALSE),
                    ==, VALIDITY_PAIR_REFUSE_UNREADABLE);
 }
 
@@ -5940,7 +5940,7 @@ test_serialize_partition (void)
 
   guint8 out[VALIDITY_PARTITION_ENTRY_SIZE];
 
-  validity_pair_serialize_partition (&part, out);
+  fpi_validity_pair_serialize_partition (&part, out);
 
   /* Check first 12 bytes: id(1) type(1) access_lvl(2LE) offset(4LE) size(4LE) */
   g_assert_cmpuint (out[0], ==, 1);
@@ -5980,9 +5980,9 @@ test_make_cert_size (void)
   gsize cert_len;
   guint8 password[32];
   RAND_bytes (password, sizeof (password));
-  g_autofree guint8 *cert = validity_pair_make_cert (pub_x, pub_y,
-                                                     password, sizeof (password),
-                                                     &cert_len);
+  g_autofree guint8 *cert = fpi_validity_pair_make_cert (pub_x, pub_y,
+                                                         password, sizeof (password),
+                                                         &cert_len);
 
   g_assert_nonnull (cert);
   g_assert_cmpuint (cert_len, ==, VALIDITY_CLIENT_CERT_SIZE);
@@ -6008,12 +6008,12 @@ test_make_cert_deterministic (void)
   guint8 password[32] = { 0x03 };
 
   gsize len1, len2;
-  g_autofree guint8 *cert1 = validity_pair_make_cert (pub_x, pub_y,
-                                                      password, sizeof (password),
-                                                      &len1);
-  g_autofree guint8 *cert2 = validity_pair_make_cert (pub_x, pub_y,
-                                                      password, sizeof (password),
-                                                      &len2);
+  g_autofree guint8 *cert1 = fpi_validity_pair_make_cert (pub_x, pub_y,
+                                                          password, sizeof (password),
+                                                          &len1);
+  g_autofree guint8 *cert2 = fpi_validity_pair_make_cert (pub_x, pub_y,
+                                                          password, sizeof (password),
+                                                          &len2);
 
   g_assert_nonnull (cert1);
   g_assert_nonnull (cert2);
@@ -6040,9 +6040,9 @@ test_encrypt_key_structure (void)
   RAND_bytes (val_key, 32);
 
   gsize blob_len;
-  g_autofree guint8 *blob = validity_pair_encrypt_key (priv, pub_x, pub_y,
-                                                       enc_key, val_key,
-                                                       &blob_len);
+  g_autofree guint8 *blob = fpi_validity_pair_encrypt_key (priv, pub_x, pub_y,
+                                                           enc_key, val_key,
+                                                           &blob_len);
 
   g_assert_nonnull (blob);
   /* Blob format: 0x02(1) + IV(16) + ciphertext(112) + HMAC(32) = 161 */
@@ -6066,9 +6066,9 @@ test_encrypt_key_hmac_valid (void)
   RAND_bytes (val_key, 32);
 
   gsize blob_len;
-  g_autofree guint8 *blob = validity_pair_encrypt_key (priv, pub_x, pub_y,
-                                                       enc_key, val_key,
-                                                       &blob_len);
+  g_autofree guint8 *blob = fpi_validity_pair_encrypt_key (priv, pub_x, pub_y,
+                                                           enc_key, val_key,
+                                                           &blob_len);
 
   g_assert_nonnull (blob);
   g_assert_cmpuint (blob_len, ==, 161);
@@ -6095,7 +6095,7 @@ test_build_partition_flash_cmd (void)
 {
   /* Use a real device descriptor for the flash layout */
   const ValidityDeviceDesc *desc =
-    validity_hal_device_lookup (VALIDITY_DEV_9A);
+    fpi_validity_hal_device_lookup (VALIDITY_DEV_9A);
 
   g_assert_nonnull (desc);
 
@@ -6119,12 +6119,12 @@ test_build_partition_flash_cmd (void)
 
   gsize cmd_len;
   g_autofree guint8 *cmd =
-    validity_pair_build_partition_flash_cmd (&flash_ic, desc->flash_layout,
-                                             partition_sig, sizeof (partition_sig),
-                                             pub_x, pub_y,
-                                             password, sizeof (password),
-                                             ca_cert, sizeof (ca_cert),
-                                             &cmd_len);
+    fpi_validity_pair_build_partition_flash_cmd (&flash_ic, desc->flash_layout,
+                                                 partition_sig, sizeof (partition_sig),
+                                                 pub_x, pub_y,
+                                                 password, sizeof (password),
+                                                 ca_cert, sizeof (ca_cert),
+                                                 &cmd_len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (cmd_len, >, 5);
@@ -6145,7 +6145,7 @@ test_build_tls_flash_size (void)
 {
   ValidityPairState state;
 
-  validity_pair_state_init (&state);
+  fpi_validity_pair_state_init (&state);
 
   /* Set up minimal test data */
   guint8 priv_blob[100];
@@ -6166,9 +6166,9 @@ test_build_tls_flash_size (void)
   RAND_bytes (ca_cert, sizeof (ca_cert));
 
   gsize flash_len;
-  g_autofree guint8 *flash = validity_pair_build_tls_flash (&state,
-                                                            ca_cert, sizeof (ca_cert),
-                                                            &flash_len);
+  g_autofree guint8 *flash = fpi_validity_pair_build_tls_flash (&state,
+                                                                ca_cert, sizeof (ca_cert),
+                                                                &flash_len);
 
   g_assert_nonnull (flash);
   g_assert_cmpuint (flash_len, ==, 0x1000);
@@ -6189,7 +6189,7 @@ test_build_tls_flash_size (void)
   state.priv_blob = NULL;
   state.server_cert = NULL;
   state.ecdh_blob = NULL;
-  validity_pair_state_free (&state);
+  fpi_validity_pair_state_free (&state);
 }
 
 /* ================================================================
@@ -6200,7 +6200,7 @@ test_build_tls_flash_blocks (void)
 {
   ValidityPairState state;
 
-  validity_pair_state_init (&state);
+  fpi_validity_pair_state_init (&state);
 
   guint8 priv_blob[50];
   guint8 server_cert[100];
@@ -6220,9 +6220,9 @@ test_build_tls_flash_blocks (void)
   memset (ca_cert2, 0xDD, sizeof (ca_cert2));
 
   gsize flash_len;
-  g_autofree guint8 *flash = validity_pair_build_tls_flash (&state,
-                                                            ca_cert2, sizeof (ca_cert2),
-                                                            &flash_len);
+  g_autofree guint8 *flash = fpi_validity_pair_build_tls_flash (&state,
+                                                                ca_cert2, sizeof (ca_cert2),
+                                                                &flash_len);
   g_assert_nonnull (flash);
 
   /* Block 0 should be first: id=0, size=1 */
@@ -6239,7 +6239,7 @@ test_build_tls_flash_blocks (void)
   state.priv_blob = NULL;
   state.server_cert = NULL;
   state.ecdh_blob = NULL;
-  validity_pair_state_free (&state);
+  fpi_validity_pair_state_free (&state);
 }
 
 /* ================================================================
@@ -6250,7 +6250,7 @@ test_pair_state_lifecycle (void)
 {
   ValidityPairState state;
 
-  validity_pair_state_init (&state);
+  fpi_validity_pair_state_init (&state);
 
   g_assert_null (state.client_key);
   g_assert_null (state.server_cert);
@@ -6263,7 +6263,7 @@ test_pair_state_lifecycle (void)
   g_assert_cmpint (state.decision, ==, VALIDITY_PAIR_NOT_NEEDED);
 
   /* Free should be safe on empty state */
-  validity_pair_state_free (&state);
+  fpi_validity_pair_state_free (&state);
 }
 
 /* ================================================================
@@ -6274,7 +6274,7 @@ test_pair_state_free_with_resources (void)
 {
   ValidityPairState state;
 
-  validity_pair_state_init (&state);
+  fpi_validity_pair_state_init (&state);
 
   state.server_cert = g_malloc (100);
   state.server_cert_len = 100;
@@ -6292,7 +6292,7 @@ test_pair_state_free_with_resources (void)
   g_assert_nonnull (state.client_key);
 
   /* Free should release all resources without leak */
-  validity_pair_state_free (&state);
+  fpi_validity_pair_state_free (&state);
 }
 
 /* ================================================================
@@ -6312,10 +6312,10 @@ test_encrypt_key_different_inputs (void)
   RAND_bytes (val_key, 32);
 
   gsize len1, len2;
-  g_autofree guint8 *blob1 = validity_pair_encrypt_key (priv1, pub_x, pub_y,
-                                                        enc_key, val_key, &len1);
-  g_autofree guint8 *blob2 = validity_pair_encrypt_key (priv2, pub_x, pub_y,
-                                                        enc_key, val_key, &len2);
+  g_autofree guint8 *blob1 = fpi_validity_pair_encrypt_key (priv1, pub_x, pub_y,
+                                                            enc_key, val_key, &len1);
+  g_autofree guint8 *blob2 = fpi_validity_pair_encrypt_key (priv2, pub_x, pub_y,
+                                                            enc_key, val_key, &len2);
 
   g_assert_nonnull (blob1);
   g_assert_nonnull (blob2);
@@ -6351,7 +6351,7 @@ test_split_chunks_basic (void)
   gsize n = 0;
   ValidityCaptureChunk *chunks;
 
-  chunks = validity_capture_split_chunks (buf, sizeof (buf), &n);
+  chunks = fpi_validity_capture_split_chunks (buf, sizeof (buf), &n);
 
   g_assert_nonnull (chunks);
   g_assert_cmpuint (n, ==, 2);
@@ -6364,7 +6364,7 @@ test_split_chunks_basic (void)
   g_assert_cmpuint (chunks[1].size, ==, 2);
   g_assert_cmpmem (chunks[1].data, 2, buf + 12, 2);
 
-  validity_capture_chunks_free (chunks, n);
+  fpi_validity_capture_chunks_free (chunks, n);
 }
 
 /* ================================================================
@@ -6385,19 +6385,19 @@ test_split_merge_roundtrip (void)
   gsize n = 0;
   ValidityCaptureChunk *chunks;
 
-  chunks = validity_capture_split_chunks (buf, sizeof (buf), &n);
+  chunks = fpi_validity_capture_split_chunks (buf, sizeof (buf), &n);
   g_assert_nonnull (chunks);
   g_assert_cmpuint (n, ==, 2);
 
   gsize merged_len = 0;
-  guint8 *merged = validity_capture_merge_chunks (chunks, n, &merged_len);
+  guint8 *merged = fpi_validity_capture_merge_chunks (chunks, n, &merged_len);
 
   g_assert_nonnull (merged);
   g_assert_cmpuint (merged_len, ==, sizeof (buf));
   g_assert_cmpmem (merged, merged_len, buf, sizeof (buf));
 
   g_free (merged);
-  validity_capture_chunks_free (chunks, n);
+  fpi_validity_capture_chunks_free (chunks, n);
 }
 
 /* ================================================================
@@ -6411,7 +6411,7 @@ test_split_chunks_empty (void)
   gsize n = 99;
   ValidityCaptureChunk *chunks;
 
-  chunks = validity_capture_split_chunks (NULL, 0, &n);
+  chunks = fpi_validity_capture_split_chunks (NULL, 0, &n);
   g_assert_null (chunks);
   g_assert_cmpuint (n, ==, 0);
 }
@@ -6432,7 +6432,7 @@ test_split_chunks_truncated (void)
   gsize n = 99;
   ValidityCaptureChunk *chunks;
 
-  chunks = validity_capture_split_chunks (buf, sizeof (buf), &n);
+  chunks = fpi_validity_capture_split_chunks (buf, sizeof (buf), &n);
   g_assert_null (chunks);
   g_assert_cmpuint (n, ==, 0);
 }
@@ -6449,8 +6449,8 @@ test_decode_insn_noop (void)
   guint8 opcode, len, n_ops;
   guint32 operands[3];
 
-  g_assert_true (validity_capture_decode_insn (data, 1, &opcode, &len,
-                                               operands, &n_ops));
+  g_assert_true (fpi_validity_capture_decode_insn (data, 1, &opcode, &len,
+                                                   operands, &n_ops));
   g_assert_cmpuint (opcode, ==, TST_OP_NOOP);
   g_assert_cmpuint (len, ==, 1);
   g_assert_cmpuint (n_ops, ==, 0);
@@ -6470,8 +6470,8 @@ test_decode_insn_call (void)
   guint8 opcode, len, n_ops;
   guint32 operands[3];
 
-  g_assert_true (validity_capture_decode_insn (data, 3, &opcode, &len,
-                                               operands, &n_ops));
+  g_assert_true (fpi_validity_capture_decode_insn (data, 3, &opcode, &len,
+                                                   operands, &n_ops));
   g_assert_cmpuint (opcode, ==, TST_OP_CALL);
   g_assert_cmpuint (len, ==, 3);
   g_assert_cmpuint (n_ops, ==, 3);
@@ -6492,8 +6492,8 @@ test_decode_insn_call_repeat_zero (void)
   guint8 opcode, len, n_ops;
   guint32 operands[3];
 
-  g_assert_true (validity_capture_decode_insn (data, 3, &opcode, &len,
-                                               operands, &n_ops));
+  g_assert_true (fpi_validity_capture_decode_insn (data, 3, &opcode, &len,
+                                                   operands, &n_ops));
   g_assert_cmpuint (opcode, ==, TST_OP_CALL);
   g_assert_cmpuint (operands[2], ==, 0x100);
 }
@@ -6513,8 +6513,8 @@ test_decode_insn_regwrite (void)
   guint8 opcode, len, n_ops;
   guint32 operands[3];
 
-  g_assert_true (validity_capture_decode_insn (data, 3, &opcode, &len,
-                                               operands, &n_ops));
+  g_assert_true (fpi_validity_capture_decode_insn (data, 3, &opcode, &len,
+                                                   operands, &n_ops));
   g_assert_cmpuint (opcode, ==, TST_OP_REG_WRITE);
   g_assert_cmpuint (len, ==, 3);
   g_assert_cmpuint (n_ops, ==, 2);
@@ -6534,8 +6534,8 @@ test_decode_insn_enable_rx (void)
   guint8 opcode, len, n_ops;
   guint32 operands[3];
 
-  g_assert_true (validity_capture_decode_insn (data, 2, &opcode, &len,
-                                               operands, &n_ops));
+  g_assert_true (fpi_validity_capture_decode_insn (data, 2, &opcode, &len,
+                                                   operands, &n_ops));
   g_assert_cmpuint (opcode, ==, TST_OP_ENABLE_RX);
   g_assert_cmpuint (len, ==, 2);
   g_assert_cmpuint (n_ops, ==, 1);
@@ -6555,8 +6555,8 @@ test_decode_insn_sample (void)
   guint8 opcode, len, n_ops;
   guint32 operands[3];
 
-  g_assert_true (validity_capture_decode_insn (data, 1, &opcode, &len,
-                                               operands, &n_ops));
+  g_assert_true (fpi_validity_capture_decode_insn (data, 1, &opcode, &len,
+                                                   operands, &n_ops));
   g_assert_cmpuint (opcode, ==, TST_OP_SAMPLE);
   g_assert_cmpuint (len, ==, 1);
   g_assert_cmpuint (n_ops, ==, 2);
@@ -6581,20 +6581,20 @@ test_find_nth_insn (void)
   };
 
   /* 1st NOOP is at offset 0 */
-  g_assert_cmpint (validity_capture_find_nth_insn (data, sizeof (data),
-                                                   TST_OP_NOOP, 1), ==, 0);
+  g_assert_cmpint (fpi_validity_capture_find_nth_insn (data, sizeof (data),
+                                                       TST_OP_NOOP, 1), ==, 0);
   /* 2nd NOOP is at offset 1 */
-  g_assert_cmpint (validity_capture_find_nth_insn (data, sizeof (data),
-                                                   TST_OP_NOOP, 2), ==, 1);
+  g_assert_cmpint (fpi_validity_capture_find_nth_insn (data, sizeof (data),
+                                                       TST_OP_NOOP, 2), ==, 1);
   /* 3rd NOOP is at offset 5 */
-  g_assert_cmpint (validity_capture_find_nth_insn (data, sizeof (data),
-                                                   TST_OP_NOOP, 3), ==, 5);
+  g_assert_cmpint (fpi_validity_capture_find_nth_insn (data, sizeof (data),
+                                                       TST_OP_NOOP, 3), ==, 5);
   /* 1st Call is at offset 2 */
-  g_assert_cmpint (validity_capture_find_nth_insn (data, sizeof (data),
-                                                   TST_OP_CALL, 1), ==, 2);
+  g_assert_cmpint (fpi_validity_capture_find_nth_insn (data, sizeof (data),
+                                                       TST_OP_CALL, 1), ==, 2);
   /* No 2nd Call */
-  g_assert_cmpint (validity_capture_find_nth_insn (data, sizeof (data),
-                                                   TST_OP_CALL, 2), ==, -1);
+  g_assert_cmpint (fpi_validity_capture_find_nth_insn (data, sizeof (data),
+                                                       TST_OP_CALL, 2), ==, -1);
 }
 
 /* ================================================================
@@ -6612,14 +6612,14 @@ test_find_nth_regwrite (void)
   };
 
   /* Find 1st write to 0x8000203C → offset 3 */
-  g_assert_cmpint (validity_capture_find_nth_regwrite (data, sizeof (data),
-                                                       0x8000203c, 1), ==, 3);
+  g_assert_cmpint (fpi_validity_capture_find_nth_regwrite (data, sizeof (data),
+                                                           0x8000203c, 1), ==, 3);
   /* No 2nd write to 0x8000203C */
-  g_assert_cmpint (validity_capture_find_nth_regwrite (data, sizeof (data),
-                                                       0x8000203c, 2), ==, -1);
+  g_assert_cmpint (fpi_validity_capture_find_nth_regwrite (data, sizeof (data),
+                                                           0x8000203c, 2), ==, -1);
   /* Find 1st write to 0x80002000 → offset 0 */
-  g_assert_cmpint (validity_capture_find_nth_regwrite (data, sizeof (data),
-                                                       0x80002000, 1), ==, 0);
+  g_assert_cmpint (fpi_validity_capture_find_nth_regwrite (data, sizeof (data),
+                                                           0x80002000, 1), ==, 0);
 }
 
 /* ================================================================
@@ -6638,8 +6638,8 @@ test_patch_timeslot_table (void)
   };
 
   /* Multiply by 2, with inc_address=TRUE */
-  g_assert_true (validity_capture_patch_timeslot_table (data, sizeof (data),
-                                                        TRUE, 2));
+  g_assert_true (fpi_validity_capture_patch_timeslot_table (data, sizeof (data),
+                                                            TRUE, 2));
 
   /* repeat becomes 3*2=6 */
   g_assert_cmpuint (data[2], ==, 6);
@@ -6660,8 +6660,8 @@ test_patch_timeslot_table_no_mult_for_repeat1 (void)
     0x00,
   };
 
-  g_assert_true (validity_capture_patch_timeslot_table (data, sizeof (data),
-                                                        TRUE, 4));
+  g_assert_true (fpi_validity_capture_patch_timeslot_table (data, sizeof (data),
+                                                            TRUE, 4));
   /* repeat stays 1 (not multiplied because <= 1) */
   g_assert_cmpuint (data[2], ==, 1);
   /* address NOT incremented */
@@ -6681,7 +6681,7 @@ test_bitpack_uniform (void)
   guint8 v0, v1;
   gsize out_len;
 
-  guint8 *packed = validity_capture_bitpack (values, 4, &v0, &v1, &out_len);
+  guint8 *packed = fpi_validity_capture_bitpack (values, 4, &v0, &v1, &out_len);
 
   g_assert_nonnull (packed);
   g_assert_cmpuint (v0, ==, 0);
@@ -6704,7 +6704,7 @@ test_bitpack_range (void)
   guint8 v0, v1;
   gsize out_len;
 
-  guint8 *packed = validity_capture_bitpack (values, 4, &v0, &v1, &out_len);
+  guint8 *packed = fpi_validity_capture_bitpack (values, 4, &v0, &v1, &out_len);
 
   g_assert_nonnull (packed);
   g_assert_cmpuint (v0, ==, 2);     /* 2 bits needed for max delta 3 */
@@ -6782,7 +6782,7 @@ test_factory_bits_parsing (void)
   guint8 *out_cal_values = NULL, *out_cal_data = NULL;
   gsize out_cal_values_len = 0, out_cal_data_len = 0;
 
-  gboolean ok = validity_capture_parse_factory_bits (
+  gboolean ok = fpi_validity_capture_parse_factory_bits (
     resp->data, resp->len,
     &out_cal_values, &out_cal_values_len,
     &out_cal_data, &out_cal_data_len);
@@ -6828,9 +6828,9 @@ test_factory_bits_no_subtag3 (void)
   guint8 *cv = NULL;
   gsize cv_len = 0;
 
-  gboolean ok = validity_capture_parse_factory_bits (buf, 25,
-                                                     &cv, &cv_len,
-                                                     NULL, NULL);
+  gboolean ok = fpi_validity_capture_parse_factory_bits (buf, 25,
+                                                         &cv, &cv_len,
+                                                         NULL, NULL);
   g_assert_false (ok);
   g_assert_null (cv);
 }
@@ -6859,7 +6859,7 @@ test_average_frames_interleave2 (void)
   };
 
   gsize out_len = 0;
-  guint8 *result = validity_capture_average_frames (
+  guint8 *result = fpi_validity_capture_average_frames (
     raw, sizeof (raw),
     lines_per_frame, bytes_per_line,
     lines_per_calibration_data, calibration_frames,
@@ -6895,9 +6895,9 @@ test_clean_slate_roundtrip (void)
   guint8 test_data[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
   gsize slate_len = 0;
 
-  guint8 *slate = validity_capture_build_clean_slate (test_data,
-                                                      sizeof (test_data),
-                                                      &slate_len);
+  guint8 *slate = fpi_validity_capture_build_clean_slate (test_data,
+                                                          sizeof (test_data),
+                                                          &slate_len);
 
   g_assert_nonnull (slate);
   g_assert_cmpuint (slate_len, >, 68);
@@ -6906,11 +6906,11 @@ test_clean_slate_roundtrip (void)
   g_assert_cmpuint (FP_READ_UINT16_LE (slate), ==, 0x5002);
 
   /* Verify should pass */
-  g_assert_true (validity_capture_verify_clean_slate (slate, slate_len));
+  g_assert_true (fpi_validity_capture_verify_clean_slate (slate, slate_len));
 
   /* Corrupt one byte and verify should fail */
   slate[70] ^= 0xff;
-  g_assert_false (validity_capture_verify_clean_slate (slate, slate_len));
+  g_assert_false (fpi_validity_capture_verify_clean_slate (slate, slate_len));
 
   g_free (slate);
 }
@@ -6926,18 +6926,18 @@ test_finger_mapping (void)
   /* FpFinger enum: LEFT_THUMB=1, ..., RIGHT_LITTLE=10 */
   for (guint f = 1; f <= 10; f++)
     {
-      guint16 subtype = validity_finger_to_subtype (f);
+      guint16 subtype = fpi_validity_finger_to_subtype (f);
       g_assert_cmpuint (subtype, ==, f);
 
-      gint back = validity_subtype_to_finger (subtype);
+      gint back = fpi_validity_subtype_to_finger (subtype);
       g_assert_cmpint (back, ==, (gint) f);
     }
 
   /* Out of range */
-  g_assert_cmpuint (validity_finger_to_subtype (0), ==, 0);
-  g_assert_cmpuint (validity_finger_to_subtype (11), ==, 0);
-  g_assert_cmpint (validity_subtype_to_finger (0), ==, -1);
-  g_assert_cmpint (validity_subtype_to_finger (11), ==, -1);
+  g_assert_cmpuint (fpi_validity_finger_to_subtype (0), ==, 0);
+  g_assert_cmpuint (fpi_validity_finger_to_subtype (11), ==, 0);
+  g_assert_cmpint (fpi_validity_subtype_to_finger (0), ==, -1);
+  g_assert_cmpint (fpi_validity_subtype_to_finger (11), ==, -1);
 }
 
 /* ================================================================
@@ -6949,8 +6949,8 @@ static void
 test_led_commands (void)
 {
   gsize start_len = 0, end_len = 0;
-  const guint8 *start_cmd = validity_capture_glow_start_cmd (&start_len);
-  const guint8 *end_cmd = validity_capture_glow_end_cmd (&end_len);
+  const guint8 *start_cmd = fpi_validity_capture_glow_start_cmd (&start_len);
+  const guint8 *end_cmd = fpi_validity_capture_glow_end_cmd (&end_len);
 
   g_assert_nonnull (start_cmd);
   g_assert_nonnull (end_cmd);
@@ -6976,14 +6976,14 @@ test_capture_prog_lookup (void)
   gsize len = 0;
 
   /* Known: firmware 6.x, dev_type 0xb5 */
-  const guint8 *prog = validity_capture_prog_lookup (6, 7, 0x00b5, &len);
+  const guint8 *prog = fpi_validity_capture_prog_lookup (6, 7, 0x00b5, &len);
 
   g_assert_nonnull (prog);
   g_assert_cmpuint (len, >, 0);
 
   /* The program should be parseable as TLV chunks */
   gsize n_chunks = 0;
-  ValidityCaptureChunk *chunks = validity_capture_split_chunks (prog, len, &n_chunks);
+  ValidityCaptureChunk *chunks = fpi_validity_capture_split_chunks (prog, len, &n_chunks);
   g_assert_nonnull (chunks);
   g_assert_cmpuint (n_chunks, >=, 4);   /* At least ACM, CEM, TST, offset */
 
@@ -7002,18 +7002,18 @@ test_capture_prog_lookup (void)
   g_assert_true (has_tst);
   g_assert_true (has_2d);
 
-  validity_capture_chunks_free (chunks, n_chunks);
+  fpi_validity_capture_chunks_free (chunks, n_chunks);
 
   /* Also check 0x0885 (same geometry) */
-  prog = validity_capture_prog_lookup (6, 0, 0x0885, &len);
+  prog = fpi_validity_capture_prog_lookup (6, 0, 0x0885, &len);
   g_assert_nonnull (prog);
 
   /* Unknown: firmware 5.x */
-  prog = validity_capture_prog_lookup (5, 0, 0x00b5, &len);
+  prog = fpi_validity_capture_prog_lookup (5, 0, 0x00b5, &len);
   g_assert_null (prog);
 
   /* Unknown: dev_type not in type1 list */
-  prog = validity_capture_prog_lookup (6, 0, 0x1234, &len);
+  prog = fpi_validity_capture_prog_lookup (6, 0, 0x1234, &len);
   g_assert_null (prog);
 }
 
@@ -7029,7 +7029,7 @@ test_capture_state_setup (void)
   ValidityCaptureState state;
   const ValiditySensorTypeInfo *type_info;
 
-  type_info = validity_sensor_type_info_lookup (0x00b5);
+  type_info = fpi_validity_sensor_type_info_lookup (0x00b5);
   g_assert_nonnull (type_info);
 
   /* Build minimal factory bits response with subtag 3 */
@@ -7053,10 +7053,10 @@ test_capture_state_setup (void)
   g_byte_array_append (fb, data_hdr, 4);
   g_byte_array_append (fb, cal_vals, sizeof (cal_vals));
 
-  validity_capture_state_init (&state);
-  gboolean ok = validity_capture_state_setup (&state, type_info,
-                                              0x00b5, 6, 7,
-                                              fb->data, fb->len);
+  fpi_validity_capture_state_init (&state);
+  gboolean ok = fpi_validity_capture_state_setup (&state, type_info,
+                                                  0x00b5, 6, 7,
+                                                  fb->data, fb->len);
 
   g_assert_true (ok);
   g_assert_true (state.is_type1_device);
@@ -7075,7 +7075,7 @@ test_capture_state_setup (void)
   g_assert_nonnull (state.capture_prog);
   g_assert_cmpuint (state.capture_prog_len, >, 0);
 
-  validity_capture_state_clear (&state);
+  fpi_validity_capture_state_clear (&state);
   g_byte_array_free (fb, TRUE);
 }
 
@@ -7091,14 +7091,14 @@ test_build_cmd_02_header (void)
   ValidityCaptureState state;
   const ValiditySensorTypeInfo *type_info;
 
-  type_info = validity_sensor_type_info_lookup (0x00b5);
+  type_info = fpi_validity_sensor_type_info_lookup (0x00b5);
   g_assert_nonnull (type_info);
 
-  validity_capture_state_init (&state);
+  fpi_validity_capture_state_init (&state);
 
   /* Minimal setup: just enough for build_cmd_02 */
   gsize prog_len;
-  state.capture_prog = validity_capture_prog_lookup (6, 7, 0x00b5, &prog_len);
+  state.capture_prog = fpi_validity_capture_prog_lookup (6, 7, 0x00b5, &prog_len);
   g_assert_nonnull (state.capture_prog);
   state.capture_prog_len = prog_len;
   state.is_type1_device = TRUE;
@@ -7112,9 +7112,9 @@ test_build_cmd_02_header (void)
   state.factory_calibration_values_len = 112;
 
   gsize cmd_len = 0;
-  guint8 *cmd = validity_capture_build_cmd_02 (&state, type_info,
-                                               VALIDITY_CAPTURE_CALIBRATE,
-                                               &cmd_len);
+  guint8 *cmd = fpi_validity_capture_build_cmd_02 (&state, type_info,
+                                                   VALIDITY_CAPTURE_CALIBRATE,
+                                                   &cmd_len);
 
   g_assert_nonnull (cmd);
   g_assert_cmpuint (cmd_len, >=, 5);
@@ -7131,18 +7131,18 @@ test_build_cmd_02_header (void)
 
   /* Remainder should be parseable as TLV chunks */
   gsize n_chunks = 0;
-  ValidityCaptureChunk *chunks = validity_capture_split_chunks (
+  ValidityCaptureChunk *chunks = fpi_validity_capture_split_chunks (
     cmd + 5, cmd_len - 5, &n_chunks);
   g_assert_nonnull (chunks);
   g_assert_cmpuint (n_chunks, >=, 4);
 
-  validity_capture_chunks_free (chunks, n_chunks);
+  fpi_validity_capture_chunks_free (chunks, n_chunks);
   g_free (cmd);
 
   /* Test IDENTIFY mode: req_lines should be 0 */
-  cmd = validity_capture_build_cmd_02 (&state, type_info,
-                                       VALIDITY_CAPTURE_IDENTIFY,
-                                       &cmd_len);
+  cmd = fpi_validity_capture_build_cmd_02 (&state, type_info,
+                                           VALIDITY_CAPTURE_IDENTIFY,
+                                           &cmd_len);
   g_assert_nonnull (cmd);
   g_assert_cmpuint (FP_READ_UINT16_LE (cmd + 3), ==, 0);
   g_free (cmd);
@@ -7169,9 +7169,9 @@ test_calibration_processing (void)
   gsize calib_len = 0;
 
   /* First call: initializes calib_data */
-  validity_capture_process_calibration (&calib, &calib_len,
-                                        frame, sizeof (frame),
-                                        bytes_per_line);
+  fpi_validity_capture_process_calibration (&calib, &calib_len,
+                                            frame, sizeof (frame),
+                                            bytes_per_line);
 
   g_assert_nonnull (calib);
   g_assert_cmpuint (calib_len, ==, 16);
@@ -7186,9 +7186,9 @@ test_calibration_processing (void)
     g_assert_cmpuint (calib[i], ==, 0x00);
 
   /* Second call with same frame: accumulate */
-  validity_capture_process_calibration (&calib, &calib_len,
-                                        frame, sizeof (frame),
-                                        bytes_per_line);
+  fpi_validity_capture_process_calibration (&calib, &calib_len,
+                                            frame, sizeof (frame),
+                                            bytes_per_line);
 
   /* add(0, 0) = 0, so data bytes still 0 */
   for (int i = 8; i < 16; i++)
@@ -7207,12 +7207,12 @@ static void
 test_capture_split_real_prog (void)
 {
   gsize prog_len = 0;
-  const guint8 *prog = validity_capture_prog_lookup (6, 7, 0x00b5, &prog_len);
+  const guint8 *prog = fpi_validity_capture_prog_lookup (6, 7, 0x00b5, &prog_len);
 
   g_assert_nonnull (prog);
 
   gsize n = 0;
-  ValidityCaptureChunk *chunks = validity_capture_split_chunks (prog, prog_len, &n);
+  ValidityCaptureChunk *chunks = fpi_validity_capture_split_chunks (prog, prog_len, &n);
 
   g_assert_nonnull (chunks);
   g_assert_cmpuint (n, ==, 6);
@@ -7238,7 +7238,7 @@ test_capture_split_real_prog (void)
   g_assert_cmpuint (chunks[5].type, ==, 0x0035);
   g_assert_cmpuint (chunks[5].size, ==, 4);
 
-  validity_capture_chunks_free (chunks, n);
+  fpi_validity_capture_chunks_free (chunks, n);
 }
 
 /* ================================================================
@@ -7253,21 +7253,21 @@ test_data_store_empty (void)
 {
   ValidityDataStore store;
 
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   /* All tags should return NULL */
   for (int tag = 0; tag < VALIDITY_DATA_NUM_TAGS; tag++)
     {
       gsize len;
-      const guint8 *data = validity_data_get_bytes (&store, tag, &len);
+      const guint8 *data = fpi_validity_data_get_bytes (&store, tag, &len);
       g_assert_null (data);
       g_assert_cmpuint (len, ==, 0);
 
-      GBytes *bytes = validity_data_get (&store, tag);
+      GBytes *bytes = fpi_validity_data_get (&store, tag);
       g_assert_null (bytes);
     }
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
 }
 
 /* ================================================================
@@ -7278,9 +7278,9 @@ test_data_store_double_free (void)
 {
   ValidityDataStore store;
 
-  validity_data_store_init (&store);
-  validity_data_store_free (&store);
-  validity_data_store_free (&store);
+  fpi_validity_data_store_init (&store);
+  fpi_validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
 }
 
 /* ================================================================
@@ -7320,22 +7320,22 @@ test_data_load_valid_hmac (void)
 
   /* Load and verify */
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_file (&store, VALIDITY_DATA_INIT,
-                                         tmpfile, &error);
+  gboolean ok = fpi_validity_data_load_file (&store, VALIDITY_DATA_INIT,
+                                             tmpfile, &error);
   g_assert_no_error (error);
   g_assert_true (ok);
 
   /* Verify loaded data matches payload (without HMAC) */
   gsize len;
-  const guint8 *data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+  const guint8 *data = fpi_validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
   g_assert_nonnull (data);
   g_assert_cmpuint (len, ==, payload_len);
   g_assert_cmpmem (data, len, payload, payload_len);
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   g_unlink (tmpfile);
 }
 
@@ -7359,21 +7359,21 @@ test_data_load_corrupt_hmac (void)
   close (fd);
 
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_file (&store, VALIDITY_DATA_INIT,
-                                         tmpfile, &error);
+  gboolean ok = fpi_validity_data_load_file (&store, VALIDITY_DATA_INIT,
+                                             tmpfile, &error);
   g_assert_false (ok);
   g_assert_nonnull (error);
   g_error_free (error);
 
   /* Tag should not be populated */
   gsize len;
-  const guint8 *data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+  const guint8 *data = fpi_validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
   g_assert_null (data);
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   g_unlink (tmpfile);
 }
 
@@ -7396,16 +7396,16 @@ test_data_load_too_small (void)
   close (fd);
 
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_file (&store, VALIDITY_DATA_INIT,
-                                         tmpfile, &error);
+  gboolean ok = fpi_validity_data_load_file (&store, VALIDITY_DATA_INIT,
+                                             tmpfile, &error);
   g_assert_false (ok);
   g_assert_nonnull (error);
   g_error_free (error);
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   g_unlink (tmpfile);
 }
 
@@ -7417,17 +7417,17 @@ test_data_load_nonexistent (void)
 {
   ValidityDataStore store;
 
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_file (&store, VALIDITY_DATA_INIT,
-                                         "/nonexistent/path/blob.bin",
-                                         &error);
+  gboolean ok = fpi_validity_data_load_file (&store, VALIDITY_DATA_INIT,
+                                             "/nonexistent/path/blob.bin",
+                                             &error);
   g_assert_false (ok);
   g_assert_nonnull (error);
   g_error_free (error);
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
 }
 
 /* ================================================================
@@ -7481,7 +7481,7 @@ test_data_load_device_missing (void)
 {
   ValidityDataStore store;
 
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   /* Temporarily override search paths to non-existent directories */
   const gchar *saved0 = validity_data_search_paths[0];
@@ -7490,7 +7490,7 @@ test_data_load_device_missing (void)
   validity_data_search_paths[1] = "/tmp/nonexistent_validity_data_dir2";
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_device (&store, 0x06cb, 0x009a, &error);
+  gboolean ok = fpi_validity_data_load_device (&store, 0x06cb, 0x009a, &error);
 
   g_assert_false (ok);
   g_assert_nonnull (error);
@@ -7507,7 +7507,7 @@ test_data_load_device_missing (void)
   validity_data_search_paths[0] = saved0;
   validity_data_search_paths[1] = saved1;
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
 }
 
 /* ================================================================
@@ -7525,7 +7525,7 @@ test_data_load_device_missing_init (void)
   g_assert_cmpint (g_mkdir (devdir, 0755), ==, 0);
 
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   const gchar *saved0 = validity_data_search_paths[0];
   const gchar *saved1 = validity_data_search_paths[1];
@@ -7533,7 +7533,7 @@ test_data_load_device_missing_init (void)
   validity_data_search_paths[1] = NULL;
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_device (&store, 0x06cb, 0x009a, &error);
+  gboolean ok = fpi_validity_data_load_device (&store, 0x06cb, 0x009a, &error);
 
   g_assert_false (ok);
   g_assert_nonnull (error);
@@ -7544,7 +7544,7 @@ test_data_load_device_missing_init (void)
   validity_data_search_paths[0] = saved0;
   validity_data_search_paths[1] = saved1;
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   g_rmdir (devdir);
   g_rmdir (tmpdir);
 }
@@ -7574,7 +7574,7 @@ test_data_load_device_valid (void)
   write_hmac_file (dbe_path, dbe_payload, sizeof (dbe_payload));
 
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   const gchar *saved0 = validity_data_search_paths[0];
   const gchar *saved1 = validity_data_search_paths[1];
@@ -7582,36 +7582,36 @@ test_data_load_device_valid (void)
   validity_data_search_paths[1] = NULL;
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_device (&store, 0x06cb, 0x009a, &error);
+  gboolean ok = fpi_validity_data_load_device (&store, 0x06cb, 0x009a, &error);
 
   g_assert_no_error (error);
   g_assert_true (ok);
 
   /* Verify init was loaded */
   gsize len;
-  const guint8 *data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+  const guint8 *data = fpi_validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
   g_assert_nonnull (data);
   g_assert_cmpuint (len, ==, sizeof (init_payload));
   g_assert_cmpmem (data, len, init_payload, sizeof (init_payload));
 
   /* Verify db_write_enable was loaded */
-  const guint8 *dbe = validity_data_get_bytes (&store,
-                                               VALIDITY_DATA_DB_WRITE_ENABLE,
-                                               &len);
+  const guint8 *dbe = fpi_validity_data_get_bytes (&store,
+                                                   VALIDITY_DATA_DB_WRITE_ENABLE,
+                                                   &len);
   g_assert_nonnull (dbe);
   g_assert_cmpuint (len, ==, sizeof (dbe_payload));
   g_assert_cmpmem (dbe, len, dbe_payload, sizeof (dbe_payload));
 
   /* Optional files not present should be NULL */
-  const guint8 *reset = validity_data_get_bytes (&store,
-                                                 VALIDITY_DATA_RESET, &len);
+  const guint8 *reset = fpi_validity_data_get_bytes (&store,
+                                                     VALIDITY_DATA_RESET, &len);
   g_assert_null (reset);
   g_assert_cmpuint (len, ==, 0);
 
   validity_data_search_paths[0] = saved0;
   validity_data_search_paths[1] = saved1;
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   g_unlink (init_path);
   g_unlink (dbe_path);
   g_rmdir (devdir);
@@ -7626,7 +7626,7 @@ test_data_load_common_missing (void)
 {
   ValidityDataStore store;
 
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   const gchar *saved0 = validity_data_search_paths[0];
   const gchar *saved1 = validity_data_search_paths[1];
@@ -7634,7 +7634,7 @@ test_data_load_common_missing (void)
   validity_data_search_paths[1] = "/tmp/nonexistent_validity_common_dir2";
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_common (&store, &error);
+  gboolean ok = fpi_validity_data_load_common (&store, &error);
 
   g_assert_false (ok);
   g_assert_nonnull (error);
@@ -7651,7 +7651,7 @@ test_data_load_common_missing (void)
   validity_data_search_paths[0] = saved0;
   validity_data_search_paths[1] = saved1;
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
 }
 
 /* ================================================================
@@ -7690,7 +7690,7 @@ test_data_load_common_valid (void)
     }
 
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   const gchar *saved0 = validity_data_search_paths[0];
   const gchar *saved1 = validity_data_search_paths[1];
@@ -7698,7 +7698,7 @@ test_data_load_common_valid (void)
   validity_data_search_paths[1] = NULL;
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_common (&store, &error);
+  gboolean ok = fpi_validity_data_load_common (&store, &error);
 
   g_assert_no_error (error);
   g_assert_true (ok);
@@ -7707,7 +7707,7 @@ test_data_load_common_valid (void)
   for (gsize i = 0; i < G_N_ELEMENTS (files); i++)
     {
       gsize len;
-      const guint8 *data = validity_data_get_bytes (&store, files[i].tag, &len);
+      const guint8 *data = fpi_validity_data_get_bytes (&store, files[i].tag, &len);
       g_assert_nonnull (data);
       g_assert_cmpuint (len, ==, 4);
       g_assert_cmpuint (data[0], ==, files[i].marker);
@@ -7717,7 +7717,7 @@ test_data_load_common_valid (void)
   validity_data_search_paths[1] = saved1;
 
   /* Cleanup */
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   for (gsize i = 0; i < G_N_ELEMENTS (files); i++)
     {
       g_unlink (paths[i]);
@@ -7736,18 +7736,18 @@ test_data_enroll_dbe_missing (void)
   /* Create a minimal FpiDeviceValidity with empty data stores */
   FpiDeviceValidity dev = { 0 };
 
-  validity_data_store_init (&dev.device_data);
-  validity_data_store_init (&dev.common_data);
+  fpi_validity_data_store_init (&dev.device_data);
+  fpi_validity_data_store_init (&dev.common_data);
 
   /* db_write_enable is used in enroll, verify (match), and delete flows.
   * When data files are not installed, it must return NULL gracefully. */
   gsize len;
-  const guint8 *dbe = validity_db_get_write_enable_blob (&dev, &len);
+  const guint8 *dbe = fpi_validity_db_get_write_enable_blob (&dev, &len);
   g_assert_null (dbe);
   g_assert_cmpuint (len, ==, 0);
 
   /* fwext accessor also returns NULL */
-  const guint8 *fwe = validity_fwext_get_db_write_enable (&dev, &len);
+  const guint8 *fwe = fpi_validity_fwext_get_db_write_enable (&dev, &len);
   g_assert_null (fwe);
   g_assert_cmpuint (len, ==, 0);
 
@@ -7757,8 +7757,8 @@ test_data_enroll_dbe_missing (void)
   g_assert_null (dev.tls.fw_pubkey_x);
   g_assert_null (dev.tls.fw_pubkey_y);
 
-  validity_data_store_free (&dev.device_data);
-  validity_data_store_free (&dev.common_data);
+  fpi_validity_data_store_free (&dev.device_data);
+  fpi_validity_data_store_free (&dev.common_data);
 }
 
 /* ================================================================
@@ -7786,7 +7786,7 @@ test_data_enroll_dbe_loaded (void)
   write_hmac_file (dbe_path, dbe_data, sizeof (dbe_data));
 
   FpiDeviceValidity dev = { 0 };
-  validity_data_store_init (&dev.device_data);
+  fpi_validity_data_store_init (&dev.device_data);
 
   const gchar *saved0 = validity_data_search_paths[0];
   const gchar *saved1 = validity_data_search_paths[1];
@@ -7794,27 +7794,27 @@ test_data_enroll_dbe_loaded (void)
   validity_data_search_paths[1] = NULL;
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_device (&dev.device_data,
-                                           0x06cb, 0x009a, &error);
+  gboolean ok = fpi_validity_data_load_device (&dev.device_data,
+                                               0x06cb, 0x009a, &error);
   g_assert_no_error (error);
   g_assert_true (ok);
 
   /* Now the enroll/verify consumer should find the data */
   gsize len;
-  const guint8 *dbe = validity_db_get_write_enable_blob (&dev, &len);
+  const guint8 *dbe = fpi_validity_db_get_write_enable_blob (&dev, &len);
   g_assert_nonnull (dbe);
   g_assert_cmpuint (len, ==, sizeof (dbe_data));
   g_assert_cmpmem (dbe, len, dbe_data, sizeof (dbe_data));
 
   /* fwext accessor should also work */
-  const guint8 *fwe = validity_fwext_get_db_write_enable (&dev, &len);
+  const guint8 *fwe = fpi_validity_fwext_get_db_write_enable (&dev, &len);
   g_assert_nonnull (fwe);
   g_assert_cmpuint (len, ==, sizeof (dbe_data));
 
   validity_data_search_paths[0] = saved0;
   validity_data_search_paths[1] = saved1;
 
-  validity_data_store_free (&dev.device_data);
+  fpi_validity_data_store_free (&dev.device_data);
   g_unlink (init_path);
   g_unlink (dbe_path);
   g_rmdir (devdir);
@@ -7843,7 +7843,7 @@ test_data_load_device_corrupt (void)
                                       sizeof (bad_file), NULL));
 
   ValidityDataStore store;
-  validity_data_store_init (&store);
+  fpi_validity_data_store_init (&store);
 
   const gchar *saved0 = validity_data_search_paths[0];
   const gchar *saved1 = validity_data_search_paths[1];
@@ -7851,7 +7851,7 @@ test_data_load_device_corrupt (void)
   validity_data_search_paths[1] = NULL;
 
   GError *error = NULL;
-  gboolean ok = validity_data_load_device (&store, 0x06cb, 0x009a, &error);
+  gboolean ok = fpi_validity_data_load_device (&store, 0x06cb, 0x009a, &error);
 
   g_assert_false (ok);
   g_assert_nonnull (error);
@@ -7862,7 +7862,7 @@ test_data_load_device_corrupt (void)
   validity_data_search_paths[0] = saved0;
   validity_data_search_paths[1] = saved1;
 
-  validity_data_store_free (&store);
+  fpi_validity_data_store_free (&store);
   g_unlink (init_path);
   g_rmdir (devdir);
   g_rmdir (tmpdir);

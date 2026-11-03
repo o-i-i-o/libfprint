@@ -35,8 +35,8 @@
 #define g_usb_device_claim_interface a2t_usb_claim
 #define g_usb_device_release_interface a2t_usb_release
 #define g_usb_device_get_configuration a2t_usb_get_configuration
-#define validity_data_load_device a2t_load_device
-#define validity_data_load_common a2t_load_common
+#define fpi_validity_data_load_device a2t_load_device
+#define fpi_validity_data_load_common a2t_load_common
 #define fpi_validity_a2_init_blob_ok a2t_init_blob_ok
 
 #include "drivers/validity/validity.c"
@@ -51,8 +51,8 @@
 #undef g_usb_device_claim_interface
 #undef g_usb_device_release_interface
 #undef g_usb_device_get_configuration
-#undef validity_data_load_device
-#undef validity_data_load_common
+#undef fpi_validity_data_load_device
+#undef fpi_validity_data_load_common
 #undef fpi_validity_a2_init_blob_ok
 
 #include <stdlib.h>
@@ -778,7 +778,7 @@ test_probe (void)
       g_assert_true (!!(f & FP_DEVICE_FEATURE_STORAGE_DELETE) == permissive);
       g_assert_true (!!(f & FP_DEVICE_FEATURE_STORAGE_CLEAR) == permissive);
       g_assert_true (!!(f & FP_DEVICE_FEATURE_CAPTURE) ==
-                     (!permissive && validity_dev_overrides_built ()));
+                     (!permissive && fpi_validity_dev_overrides_built ()));
     }
   sensor_reset ();
 }
@@ -958,19 +958,19 @@ static void
 set_sensor_ready (FpiDeviceValidity *self,
                   gboolean           calibrated)
 {
-  const ValidityDeviceInfo *info = validity_device_info_lookup (0x0190, 0x006a);
+  const ValidityDeviceInfo *info = fpi_validity_device_info_lookup (0x0190, 0x006a);
 
   g_assert_nonnull (info);
-  validity_tls_init (&self->tls);
-  validity_sensor_state_init (&self->sensor);
-  validity_capture_state_init (&self->capture);
+  fpi_validity_tls_init (&self->tls);
+  fpi_validity_sensor_state_init (&self->sensor);
+  fpi_validity_capture_state_init (&self->capture);
   self->tls.secure_rx = TRUE;
   self->sensor.device_info = info;
-  self->sensor.type_info = validity_sensor_type_info_lookup (info->type);
+  self->sensor.type_info = fpi_validity_sensor_type_info_lookup (info->type);
   self->sensor.real_sensor_type = info->type;
-  g_assert_true (validity_capture_state_setup (&self->capture,
-                                               self->sensor.type_info,
-                                               info->type, 6, 7, NULL, 0));
+  g_assert_true (fpi_validity_capture_state_setup (&self->capture,
+                                                   self->sensor.type_info,
+                                                   info->type, 6, 7, NULL, 0));
   self->capture.factory_calibration_values = g_malloc0 (112);
   self->capture.factory_calibration_values_len = 112;
   if (calibrated)
@@ -983,9 +983,9 @@ set_sensor_ready (FpiDeviceValidity *self,
 static void
 clear_sensor (FpiDeviceValidity *self)
 {
-  validity_capture_state_clear (&self->capture);
-  validity_sensor_state_clear (&self->sensor);
-  validity_tls_free (&self->tls);
+  fpi_validity_capture_state_clear (&self->capture);
+  fpi_validity_sensor_state_clear (&self->sensor);
+  fpi_validity_tls_free (&self->tls);
 }
 
 /* OPEN_DONE: with a session, 00a2 needs the calibrated 0x199 sensor */
@@ -1017,7 +1017,7 @@ test_state_open_done (void)
 
   /* the other sensor type an FM-3380-001 can report (0xb5) */
   set_sensor_ready (self, TRUE);
-  self->sensor.device_info = validity_device_info_lookup (0x0190, 0x005f);
+  self->sensor.device_info = fpi_validity_device_info_lookup (0x0190, 0x005f);
   g_assert_nonnull (self->sensor.device_info);
   self->sensor.real_sensor_type = self->sensor.device_info->type;
   {
@@ -1076,7 +1076,7 @@ test_state_upload_fwext (void)
   dev = a2t_device_new (VALIDITY_DEV_A2);
   self = FPI_DEVICE_VALIDITY (dev);
   self->dev_type = VALIDITY_DEV_A2;
-  validity_tls_init (&self->tls);
+  fpi_validity_tls_init (&self->tls);
   self->tls.secure_rx = TRUE;
   self->fwext_loaded = FALSE;
 
@@ -1094,7 +1094,7 @@ test_state_upload_fwext (void)
   g_assert_no_error (run_one_state (dev, OPEN_UPLOAD_FWEXT,
                                     open_upload_fwext, &next));
   g_assert_cmpint (next, ==, OPEN_UPLOAD_FWEXT + 1);
-  validity_tls_free (&self->tls);
+  fpi_validity_tls_free (&self->tls);
   sensor_reset ();
 }
 

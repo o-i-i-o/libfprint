@@ -77,9 +77,9 @@
  * ================================================================ */
 
 gint
-validity_enroll_progress_target (gint     reported,
-                                 guint    frames,
-                                 gboolean complete)
+fpi_validity_enroll_progress_target (gint     reported,
+                                     guint    frames,
+                                     gboolean complete)
 {
   gint capped;
 
@@ -194,7 +194,7 @@ interrupt_cb (FpiUsbTransfer *transfer,
    * hang. */
   if (target_state == VALIDITY_INT_FINGER_DOWN && int_type == 3 &&
       self->sensor.device_info &&
-      validity_sensor_skips_finger_down (self->sensor.real_sensor_type))
+      fpi_validity_sensor_skips_finger_down (self->sensor.real_sensor_type))
     {
       fp_info ("Finger detected on sensor (type-3; this silicon omits type-2)");
       fpi_device_report_finger_status_changes (
@@ -323,7 +323,7 @@ update_interrupt_cb (FpiUsbTransfer *transfer,
  * ================================================================ */
 
 void
-enrollment_update_result_clear (EnrollmentUpdateResult *r)
+fpi_enrollment_update_result_clear (EnrollmentUpdateResult *r)
 {
   g_clear_pointer (&r->header, g_free);
   g_clear_pointer (&r->template_data, g_free);
@@ -332,9 +332,9 @@ enrollment_update_result_clear (EnrollmentUpdateResult *r)
 }
 
 gboolean
-parse_enrollment_update_response (const guint8           *data,
-                                  gsize                   data_len,
-                                  EnrollmentUpdateResult *result)
+fpi_parse_enrollment_update_response (const guint8           *data,
+                                      gsize                   data_len,
+                                      EnrollmentUpdateResult *result)
 {
   FpiByteReader reader;
   guint16 declared_len;
@@ -416,7 +416,7 @@ enroll_cleanup_stale (FpiSsm            *ssm,
    * (e.g. if enrollment was interrupted). Send cmd 0x69 flag=0
    * (enrollment_update_end) — errors are expected and ignored. */
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_create_enrollment (FALSE, &cmd_len);
+  guint8 *cmd = fpi_validity_db_build_cmd_create_enrollment (FALSE, &cmd_len);
 
   self->enroll_key = 0;
   self->enroll_stage = 0;
@@ -425,7 +425,7 @@ enroll_cleanup_stale (FpiSsm            *ssm,
   self->enroll_reject_retries = 0;
   g_clear_pointer (&self->enroll_template, g_free);
   self->enroll_template_len = 0;
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -450,10 +450,10 @@ enroll_build_capture (FpiSsm            *ssm,
                       FpiDeviceValidity *self)
 {
   gsize cmd_len;
-  guint8 *cmd = validity_capture_build_cmd_02 (&self->capture,
-                                               self->sensor.type_info,
-                                               VALIDITY_CAPTURE_ENROLL,
-                                               &cmd_len);
+  guint8 *cmd = fpi_validity_capture_build_cmd_02 (&self->capture,
+                                                   self->sensor.type_info,
+                                                   VALIDITY_CAPTURE_ENROLL,
+                                                   &cmd_len);
 
   if (!cmd)
     {
@@ -463,7 +463,7 @@ enroll_build_capture (FpiSsm            *ssm,
       return;
     }
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -644,9 +644,9 @@ enroll_append_image_read_recv (FpiSsm            *ssm,
       fp_info ("enrollment_update read response: len=%zu",
                self->cmd_response_len);
 
-      if (parse_enrollment_update_response (self->cmd_response_data,
-                                            self->cmd_response_len,
-                                            &result))
+      if (fpi_parse_enrollment_update_response (self->cmd_response_data,
+                                                self->cmd_response_len,
+                                                &result))
         {
           /* Update template for next iteration */
           g_clear_pointer (&self->enroll_template, g_free);
@@ -670,7 +670,7 @@ enroll_append_image_read_recv (FpiSsm            *ssm,
               self->bulk_data_len = result.tid_len;
             }
 
-          enrollment_update_result_clear (&result);
+          fpi_enrollment_update_result_clear (&result);
         }
     }
   else
@@ -727,9 +727,9 @@ enroll_loop_check (FpiSsm            *ssm,
     }
 
   enroll_report_progress (self,
-                          validity_enroll_progress_target (self->enroll_reported,
-                                                           self->enroll_stage,
-                                                           FALSE));
+                          fpi_validity_enroll_progress_target (self->enroll_reported,
+                                                               self->enroll_stage,
+                                                               FALSE));
 
   /* PY loops indefinitely until TID appears.  Use a generous
    * upper bound to avoid an infinite loop on broken firmware. */
@@ -763,8 +763,8 @@ enroll_get_storage_recv (FpiSsm            *ssm,
 
   if (self->cmd_response_status != VCSFW_STATUS_OK ||
       !self->cmd_response_data ||
-      !validity_db_parse_user_storage (self->cmd_response_data,
-                                       self->cmd_response_len, &stg))
+      !fpi_validity_db_parse_user_storage (self->cmd_response_data,
+                                           self->cmd_response_len, &stg))
     {
       fp_warn ("get_user_storage failed: status=0x%04x",
                self->cmd_response_status);
@@ -775,7 +775,7 @@ enroll_get_storage_recv (FpiSsm            *ssm,
 
   self->enroll_storage_dbid = stg.dbid;
   fp_info ("Storage dbid: %u", stg.dbid);
-  validity_user_storage_clear (&stg);
+  fpi_validity_user_storage_clear (&stg);
   /* Skip storage creation states — jump to DB_WRITE_ENABLE2 */
   fpi_ssm_jump_to_state (ssm, ENROLL_DB_WRITE_ENABLE2);
 }
@@ -802,7 +802,7 @@ enroll_create_user (FpiSsm            *ssm,
    * a new on-chip record per enrollment does not accumulate stale ones. */
   g_autofree gchar *user_id = fpi_print_generate_user_id (print);
 
-  identity = validity_db_build_identity (user_id, &identity_len);
+  identity = fpi_validity_db_build_identity (user_id, &identity_len);
   if (!identity)
     {
       fp_warn ("Failed to build identity for user '%s'", user_id);
@@ -819,13 +819,13 @@ enroll_create_user (FpiSsm            *ssm,
 
   /* cmd 0x47: new_record(parent=storage_dbid, type=5=user, storage=storage_dbid, data=identity) */
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_new_record (
+  guint8 *cmd = fpi_validity_db_build_cmd_new_record (
     self->enroll_storage_dbid,
     VALIDITY_DB_RECORD_TYPE_USER,
     self->enroll_storage_dbid,
     identity, identity_len,
     &cmd_len);
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -845,9 +845,9 @@ enroll_create_user_recv (FpiSsm            *ssm,
   /* Parse the new user record ID — stash for finger creation */
   guint16 user_dbid;
   if (self->cmd_response_data &&
-      validity_db_parse_new_record_id (self->cmd_response_data,
-                                       self->cmd_response_len,
-                                       &user_dbid))
+      fpi_validity_db_parse_new_record_id (self->cmd_response_data,
+                                           self->cmd_response_len,
+                                           &user_dbid))
     {
       fp_info ("Created user record: dbid=%u", user_dbid);
       self->enroll_user_dbid = user_dbid;
@@ -874,12 +874,12 @@ enroll_create_finger (FpiSsm            *ssm,
   fpi_device_get_enroll_data (dev, &print);
   finger = fp_print_get_finger (print);
 
-  guint16 subtype = validity_finger_to_subtype (finger);
+  guint16 subtype = fpi_validity_finger_to_subtype (finger);
   guint16 user_dbid = self->enroll_user_dbid;
 
   /* Build finger data from template + tid */
   gsize finger_data_len;
-  guint8 *finger_data = validity_db_build_finger_data (
+  guint8 *finger_data = fpi_validity_db_build_finger_data (
     subtype,
     self->enroll_template, self->enroll_template_len,
     self->bulk_data, self->bulk_data_len,
@@ -888,13 +888,13 @@ enroll_create_finger (FpiSsm            *ssm,
   /* cmd 0x47: new_record(parent=user, type=0x0b, storage=3, data=finger_data)
    * python-validity: type 0xb becomes 0x6 due to db_write_enable magic */
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_new_record (
+  guint8 *cmd = fpi_validity_db_build_cmd_new_record (
     user_dbid,
     0x0b,  /* finger type: becomes 0x06 after db_write_enable */
     self->enroll_storage_dbid,
     finger_data, finger_data_len,
     &cmd_len);
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
   g_free (finger_data);
 }
@@ -914,9 +914,9 @@ enroll_create_finger_recv (FpiSsm            *ssm,
 
   guint16 finger_dbid;
   if (self->cmd_response_data &&
-      validity_db_parse_new_record_id (self->cmd_response_data,
-                                       self->cmd_response_len,
-                                       &finger_dbid))
+      fpi_validity_db_parse_new_record_id (self->cmd_response_data,
+                                           self->cmd_response_len,
+                                           &finger_dbid))
     fp_info ("Created finger record: dbid=%u", finger_dbid);
 
   fpi_ssm_next_state (ssm);
@@ -961,8 +961,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_DB_INFO:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_db_info (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_db_info (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -977,8 +977,8 @@ enroll_run_state (FpiSsm   *ssm,
          * Check free space up front and fail cleanly with DATA_FULL instead. */
         if (self->cmd_response_status == VCSFW_STATUS_OK &&
             self->cmd_response_data &&
-            validity_db_parse_info (self->cmd_response_data,
-                                    self->cmd_response_len, &info))
+            fpi_validity_db_parse_info (self->cmd_response_data,
+                                        self->cmd_response_len, &info))
           {
             fp_info ("DB partition: free=%u used=%u total=%u records=%u",
                      info.free_space, info.used, info.total, info.records);
@@ -991,7 +991,7 @@ enroll_run_state (FpiSsm   *ssm,
             fp_warn ("db_info query failed (status=0x%04x) -- skipping guard",
                      self->cmd_response_status);
           }
-        validity_db_info_clear (&info);
+        fpi_validity_db_info_clear (&info);
 
         if (full)
           {
@@ -1011,8 +1011,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_START:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_create_enrollment (TRUE, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_create_enrollment (TRUE, &cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1032,8 +1032,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_LED_ON:
       {
         gsize cmd_len;
-        const guint8 *cmd = validity_capture_glow_start_cmd (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        const guint8 *cmd = fpi_validity_capture_glow_start_cmd (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -1071,7 +1071,7 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_GET_PRG_STATUS:
       {
         const guint8 cmd[] = { 0x51, 0x00, 0x20, 0x00, 0x00 };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
       }
       break;
 
@@ -1110,7 +1110,7 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_CAPTURE_STOP:
       {
         const guint8 cmd[] = { 0x04 };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
       }
       break;
 
@@ -1124,7 +1124,7 @@ enroll_run_state (FpiSsm   *ssm,
         guint8 *cmd = validity_pack_new (&cmd_len, "bww",
                                          VCSFW_CMD_ENROLLMENT_UPDATE_START,
                                          self->enroll_key, (guint32) 0);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1140,8 +1140,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_DB_WRITE_ENABLE:
       {
         gsize blob_len;
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &blob_len);
-        vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &blob_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
       }
       break;
 
@@ -1155,9 +1155,9 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_APPEND_IMAGE:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_enrollment_update (
+        guint8 *cmd = fpi_validity_db_build_cmd_enrollment_update (
           self->enroll_template, self->enroll_template_len, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1169,8 +1169,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_CLEANUPS:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_call_cleanups (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1196,8 +1196,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_DB_WRITE_ENABLE_READ:
       {
         gsize blob_len;
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &blob_len);
-        vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &blob_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
       }
       break;
 
@@ -1211,9 +1211,9 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_APPEND_IMAGE_READ:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_enrollment_update (
+        guint8 *cmd = fpi_validity_db_build_cmd_enrollment_update (
           self->enroll_template, self->enroll_template_len, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1225,8 +1225,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_CLEANUPS_READ:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_call_cleanups (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1242,8 +1242,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_UPDATE_END:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_create_enrollment (FALSE, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_create_enrollment (FALSE, &cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1259,8 +1259,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_UPDATE_END2:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_create_enrollment (FALSE, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_create_enrollment (FALSE, &cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1273,9 +1273,9 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_GET_STORAGE:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_get_user_storage (
+        guint8 *cmd = fpi_validity_db_build_cmd_get_user_storage (
           VALIDITY_STORAGE_NAME, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1287,8 +1287,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_INIT_STORAGE_WE:
       {
         gsize blob_len;
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &blob_len);
-        vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &blob_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
       }
       break;
 
@@ -1304,9 +1304,9 @@ enroll_run_state (FpiSsm   *ssm,
         const gchar *name = VALIDITY_STORAGE_NAME;
         gsize name_len = strlen (name) + 1;
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_new_record (
+        guint8 *cmd = fpi_validity_db_build_cmd_new_record (
           1, 4, 3, (const guint8 *) name, name_len, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1327,8 +1327,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_INIT_STORAGE_CLEAN:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_call_cleanups (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1341,8 +1341,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_DB_WRITE_ENABLE2:
       {
         gsize blob_len;
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &blob_len);
-        vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &blob_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
       }
       break;
 
@@ -1369,8 +1369,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_CREATE_USER_CLEANUPS:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_call_cleanups (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1382,8 +1382,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_DB_WRITE_ENABLE3:
       {
         gsize blob_len;
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &blob_len);
-        vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &blob_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
       }
       break;
 
@@ -1410,8 +1410,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_FINAL_CLEANUPS:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_call_cleanups (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1427,8 +1427,8 @@ enroll_run_state (FpiSsm   *ssm,
     case ENROLL_LED_OFF:
       {
         gsize cmd_len;
-        const guint8 *cmd = validity_capture_glow_end_cmd (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        const guint8 *cmd = fpi_validity_capture_glow_end_cmd (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -1455,7 +1455,7 @@ enroll_reconnect_done (FpiDeviceValidity *self,
     {
       fp_info ("Reconnected -- restarting enrollment");
       self->recovery_redispatch = TRUE;
-      validity_enroll (dev);
+      fpi_validity_enroll (dev);
       return;
     }
 
@@ -1482,13 +1482,13 @@ enroll_ssm_done (FpiSsm   *ssm,
        * of failing the action (bounded; a true removal falls through). The
        * on-chip enroll session is lost on reset, so this restarts from stage 0
        * rather than resuming -- but the action does not fail. */
-      if (validity_recover_or_fail (self, error, enroll_reconnect_done, NULL))
+      if (fpi_validity_recover_or_fail (self, error, enroll_reconnect_done, NULL))
         {
           g_error_free (error);
           return;
         }
 
-      fpi_device_enroll_complete (dev, NULL, validity_map_removed_error (error));
+      fpi_device_enroll_complete (dev, NULL, fpi_validity_map_removed_error (error));
       return;
     }
 
@@ -1529,9 +1529,9 @@ enroll_ssm_done (FpiSsm   *ssm,
   self->bulk_data_len = 0;
 
   enroll_report_progress (self,
-                          validity_enroll_progress_target (self->enroll_reported,
-                                                           self->enroll_stage,
-                                                           TRUE));
+                          fpi_validity_enroll_progress_target (self->enroll_reported,
+                                                               self->enroll_stage,
+                                                               TRUE));
   fpi_device_enroll_complete (dev, g_object_ref (print), NULL);
 }
 
@@ -1567,7 +1567,7 @@ emulation_enroll (FpDevice *device)
 }
 
 void
-validity_enroll (FpDevice *device)
+fpi_validity_enroll (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
   FpiSsm *ssm;

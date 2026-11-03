@@ -27,9 +27,9 @@
 /* ---- VcsfwCmdData lifecycle ---- */
 
 VcsfwCmdData *
-vcsfw_cmd_data_new (const guint8    *cmd,
-                    gsize            cmd_len,
-                    VcsfwCmdCallback callback)
+fpi_vcsfw_cmd_data_new (const guint8    *cmd,
+                        gsize            cmd_len,
+                        VcsfwCmdCallback callback)
 {
   VcsfwCmdData *data = g_new0 (VcsfwCmdData, 1);
 
@@ -41,7 +41,7 @@ vcsfw_cmd_data_new (const guint8    *cmd,
 }
 
 void
-vcsfw_cmd_data_free (gpointer data)
+fpi_vcsfw_cmd_data_free (gpointer data)
 {
   VcsfwCmdData *cmd_data = data;
 
@@ -83,7 +83,7 @@ cmd_receive_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  vcsfw_parse_status (transfer->buffer, transfer->actual_length, &status);
+  fpi_vcsfw_parse_status (transfer->buffer, transfer->actual_length, &status);
 
   fp_dbg ("VCSFW response: status=0x%04x, len=%" G_GSSIZE_FORMAT,
           status, transfer->actual_length - 2);
@@ -117,8 +117,8 @@ cmd_receive_cb (FpiUsbTransfer *transfer,
 }
 
 void
-vcsfw_cmd_run_state (FpiSsm   *ssm,
-                     FpDevice *dev)
+fpi_vcsfw_cmd_run_state (FpiSsm   *ssm,
+                         FpDevice *dev)
 {
   VcsfwCmdData *cmd_data = fpi_ssm_get_data (ssm);
   FpiUsbTransfer *transfer;
@@ -167,20 +167,20 @@ cmd_ssm_done (FpiSsm   *ssm,
 }
 
 void
-vcsfw_cmd_send (FpiDeviceValidity *self,
-                FpiSsm            *parent_ssm,
-                const guint8      *cmd,
-                gsize              cmd_len,
-                VcsfwCmdCallback   callback)
+fpi_vcsfw_cmd_send (FpiDeviceValidity *self,
+                    FpiSsm            *parent_ssm,
+                    const guint8      *cmd,
+                    gsize              cmd_len,
+                    VcsfwCmdCallback   callback)
 {
   FpiSsm *ssm;
   VcsfwCmdData *cmd_data;
 
-  cmd_data = vcsfw_cmd_data_new (cmd, cmd_len, callback);
+  cmd_data = fpi_vcsfw_cmd_data_new (cmd, cmd_len, callback);
 
-  ssm = fpi_ssm_new (FP_DEVICE (self), vcsfw_cmd_run_state,
+  ssm = fpi_ssm_new (FP_DEVICE (self), fpi_vcsfw_cmd_run_state,
                      VCSFW_CMD_STATE_NUM_STATES);
-  fpi_ssm_set_data (ssm, cmd_data, vcsfw_cmd_data_free);
+  fpi_ssm_set_data (ssm, cmd_data, fpi_vcsfw_cmd_data_free);
 
   self->cmd_ssm = ssm;
 
@@ -230,7 +230,7 @@ tls_cmd_receive_cb (FpiUsbTransfer *transfer,
     g_string_free (hex, TRUE);
   }
   gsize decrypted_len;
-  guint8 *decrypted = validity_tls_unwrap_response (
+  guint8 *decrypted = fpi_validity_tls_unwrap_response (
     &self->tls,
     transfer->buffer, transfer->actual_length,
     &decrypted_len, &error);
@@ -256,7 +256,7 @@ tls_cmd_receive_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  vcsfw_parse_status (decrypted, decrypted_len, &status);
+  fpi_vcsfw_parse_status (decrypted, decrypted_len, &status);
 
   fp_dbg ("VCSFW TLS response: status=0x%04x, len=%" G_GSIZE_FORMAT,
           status, decrypted_len - 2);
@@ -291,8 +291,8 @@ tls_cmd_receive_cb (FpiUsbTransfer *transfer,
 }
 
 void
-vcsfw_tls_cmd_run_state (FpiSsm   *ssm,
-                         FpDevice *dev)
+fpi_vcsfw_tls_cmd_run_state (FpiSsm   *ssm,
+                             FpDevice *dev)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
   VcsfwCmdData *cmd_data = fpi_ssm_get_data (ssm);
@@ -304,10 +304,10 @@ vcsfw_tls_cmd_run_state (FpiSsm   *ssm,
       {
         /* Wrap VCSFW command as TLS application data */
         gsize wrapped_len;
-        guint8 *wrapped = validity_tls_wrap_app_data (&self->tls,
-                                                      cmd_data->cmd_data,
-                                                      cmd_data->cmd_len,
-                                                      &wrapped_len);
+        guint8 *wrapped = fpi_validity_tls_wrap_app_data (&self->tls,
+                                                          cmd_data->cmd_data,
+                                                          cmd_data->cmd_len,
+                                                          &wrapped_len);
 
         /* Build USB payload: TLS record directly (no 0x44000000 prefix
          * for post-handshake app data, per python-validity) */
@@ -341,20 +341,20 @@ vcsfw_tls_cmd_run_state (FpiSsm   *ssm,
 }
 
 void
-vcsfw_tls_cmd_send (FpiDeviceValidity *self,
-                    FpiSsm            *parent_ssm,
-                    const guint8      *cmd,
-                    gsize              cmd_len,
-                    VcsfwCmdCallback   callback)
+fpi_vcsfw_tls_cmd_send (FpiDeviceValidity *self,
+                        FpiSsm            *parent_ssm,
+                        const guint8      *cmd,
+                        gsize              cmd_len,
+                        VcsfwCmdCallback   callback)
 {
   FpiSsm *ssm;
   VcsfwCmdData *cmd_data;
 
-  cmd_data = vcsfw_cmd_data_new (cmd, cmd_len, callback);
+  cmd_data = fpi_vcsfw_cmd_data_new (cmd, cmd_len, callback);
 
-  ssm = fpi_ssm_new (FP_DEVICE (self), vcsfw_tls_cmd_run_state,
+  ssm = fpi_ssm_new (FP_DEVICE (self), fpi_vcsfw_tls_cmd_run_state,
                      VCSFW_TLS_CMD_STATE_NUM_STATES);
-  fpi_ssm_set_data (ssm, cmd_data, vcsfw_cmd_data_free);
+  fpi_ssm_set_data (ssm, cmd_data, fpi_vcsfw_cmd_data_free);
 
   self->cmd_ssm = ssm;
 
@@ -367,9 +367,9 @@ vcsfw_tls_cmd_send (FpiDeviceValidity *self,
 /* ---- Reply status ---- */
 
 gboolean
-vcsfw_parse_status (const guint8 *reply,
-                    gsize         reply_len,
-                    guint16      *status)
+fpi_vcsfw_parse_status (const guint8 *reply,
+                        gsize         reply_len,
+                        guint16      *status)
 {
   g_return_val_if_fail (status != NULL, FALSE);
 
@@ -383,9 +383,9 @@ vcsfw_parse_status (const guint8 *reply,
 /* ---- GET_VERSION (cmd 0x01) response parser ---- */
 
 gboolean
-vcsfw_parse_version (const guint8        *data,
-                     gsize                data_len,
-                     ValidityVersionInfo *info)
+fpi_vcsfw_parse_version (const guint8        *data,
+                         gsize                data_len,
+                         ValidityVersionInfo *info)
 {
   const guint8 *serial;
 

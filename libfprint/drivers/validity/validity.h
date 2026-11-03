@@ -372,7 +372,7 @@ struct _FpiDeviceValidity
 };
 
 /* Enrollment SSM (validity_enroll.c) */
-void validity_enroll (FpDevice *device);
+void fpi_validity_enroll (FpDevice *device);
 
 /* Enrollment response parsing — exposed for unit testing */
 #define ENROLLMENT_MAGIC_LEN 0x38
@@ -387,18 +387,18 @@ typedef struct
   gsize   tid_len;
 } EnrollmentUpdateResult;
 
-void     enrollment_update_result_clear (EnrollmentUpdateResult *r);
-gboolean parse_enrollment_update_response (const guint8           *data,
-                                           gsize                   data_len,
-                                           EnrollmentUpdateResult *result);
+void     fpi_enrollment_update_result_clear (EnrollmentUpdateResult *r);
+gboolean fpi_parse_enrollment_update_response (const guint8           *data,
+                                               gsize                   data_len,
+                                               EnrollmentUpdateResult *result);
 
 /* Enroll progress to have reported after @frames accepted frames (@complete
  * FALSE), or once the print is stored (@complete TRUE), given the stages
  * already reported this action. Pure -- exposed for unit testing; the policy
  * is described in validity_enroll.c. */
-gint     validity_enroll_progress_target (gint     reported,
-                                          guint    frames,
-                                          gboolean complete);
+gint     fpi_validity_enroll_progress_target (gint     reported,
+                                              guint    frames,
+                                              gboolean complete);
 
 /* Error classification for in-driver recovery ("Tier 0": reconnect and retry
  * inside the driver, with no libfprint core changes). Tier 0 covers a sensor
@@ -420,20 +420,20 @@ typedef enum {
   VALIDITY_ERR_FATAL,          /* not recoverable -- abort with the error */
 } ValidityErrClass;
 
-ValidityErrClass validity_classify_error (const GError *error,
-                                          gboolean      device_alive);
+ValidityErrClass fpi_validity_classify_error (const GError *error,
+                                              gboolean      device_alive);
 
 /* Liveness probe: TRUE if the sensor still answers on the bus (a reset that
  * only dropped the session) vs FALSE if it has left (re-enumeration). Does one
  * cheap control request; only call off the hot path (i.e. on an error). */
-gboolean validity_probe_alive (FpiDeviceValidity *self);
+gboolean fpi_validity_probe_alive (FpiDeviceValidity *self);
 
 /* Re-establish the sensor session in place after a mid-operation reset by
  * re-running the proven open sequence (the same one a fprintd re-open runs).
  * @cb is invoked with success/failure when it finishes. */
-void validity_reconnect_start (FpiDeviceValidity  *self,
-                               ValidityReconnectCb cb,
-                               gpointer            user_data);
+void fpi_validity_reconnect_start (FpiDeviceValidity  *self,
+                                   ValidityReconnectCb cb,
+                                   gpointer            user_data);
 
 /* Max in-driver reconnect attempts per operation before giving up (REMOVED). */
 #define VALIDITY_MAX_RECONNECTS 3
@@ -442,45 +442,45 @@ void validity_reconnect_start (FpiDeviceValidity  *self,
 * the bus), start an in-driver reconnect and return TRUE -- the caller must NOT
 * complete its action. Otherwise return FALSE and the caller completes with the
 * error. Bounded by reconnect_attempts; a true re-enumeration returns FALSE. */
-gboolean validity_recover_or_fail (FpiDeviceValidity  *self,
-                                   const GError       *error,
-                                   ValidityReconnectCb on_done,
-                                   gpointer            user_data);
+gboolean fpi_validity_recover_or_fail (FpiDeviceValidity  *self,
+                                       const GError       *error,
+                                       ValidityReconnectCb on_done,
+                                       gpointer            user_data);
 
 /* Verify/Identify SSMs (validity_verify.c) */
 /* Map a USB "no device" error (intermittent re-enumeration) to
  * FP_DEVICE_ERROR_REMOVED. Takes ownership of @error, returns the result. */
-GError *validity_map_removed_error (GError *error);
+GError *fpi_validity_map_removed_error (GError *error);
 
-void validity_verify (FpDevice *device);
-void validity_identify (FpDevice *device);
-void validity_list (FpDevice *device);
-void validity_delete (FpDevice *device);
-void validity_clear_storage (FpDevice *device);
+void fpi_validity_verify (FpDevice *device);
+void fpi_validity_identify (FpDevice *device);
+void fpi_validity_list (FpDevice *device);
+void fpi_validity_delete (FpDevice *device);
+void fpi_validity_clear_storage (FpDevice *device);
 
 /* Match correlation helpers (validity_verify.c) -- exposed for unit testing */
-gboolean validity_print_matches_record (FpPrint                   *print,
-                                        const ValidityMatchResult *match,
-                                        const ValidityUser        *user);
-FpPrint *validity_find_gallery_match (GPtrArray                 *gallery,
-                                      const ValidityMatchResult *match,
-                                      const ValidityUser        *user);
-FpiMatchResult validity_match_decide (gboolean                   identify,
-                                      FpPrint                   *print,
-                                      GPtrArray                 *gallery,
-                                      const ValidityMatchResult *match,
-                                      const ValidityUser        *user,
-                                      FpPrint                  **out_gallery_match);
-gboolean validity_match_user_to_read (const guint8 *data,
-                                      gsize         data_len,
-                                      guint16      *out_dbid);
-void validity_verify_clear_match_state (FpiDeviceValidity *self);
+gboolean fpi_validity_print_matches_record (FpPrint                   *print,
+                                            const ValidityMatchResult *match,
+                                            const ValidityUser        *user);
+FpPrint *fpi_validity_find_gallery_match (GPtrArray                 *gallery,
+                                          const ValidityMatchResult *match,
+                                          const ValidityUser        *user);
+FpiMatchResult fpi_validity_match_decide (gboolean                   identify,
+                                          FpPrint                   *print,
+                                          GPtrArray                 *gallery,
+                                          const ValidityMatchResult *match,
+                                          const ValidityUser        *user,
+                                          FpPrint                  **out_gallery_match);
+gboolean fpi_validity_match_user_to_read (const guint8 *data,
+                                          gsize         data_len,
+                                          guint16      *out_dbid);
+void fpi_validity_verify_clear_match_state (FpiDeviceValidity *self);
 
 /* Delete selection helpers (validity_verify.c) -- exposed for unit testing */
-gboolean validity_delete_find_finger (FpPrint            *print,
-                                      const ValidityUser *user,
-                                      guint16            *out_finger_dbid,
-                                      gboolean           *out_leaves_empty);
-gboolean validity_delete_owner_is_empty (FpPrint            *print,
-                                         guint16             owner_dbid,
-                                         const ValidityUser *user);
+gboolean fpi_validity_delete_find_finger (FpPrint            *print,
+                                          const ValidityUser *user,
+                                          guint16            *out_finger_dbid,
+                                          gboolean           *out_leaves_empty);
+gboolean fpi_validity_delete_owner_is_empty (FpPrint            *print,
+                                             guint16             owner_dbid,
+                                             const ValidityUser *user);

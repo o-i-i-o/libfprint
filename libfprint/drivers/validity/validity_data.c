@@ -117,7 +117,7 @@ verify_hmac (const guint8 *data,
  * ================================================================ */
 
 gboolean
-validity_dev_overrides_built (void)
+fpi_validity_dev_overrides_built (void)
 {
 #if VALIDITY_DEV_OVERRIDES
   return TRUE;
@@ -127,7 +127,7 @@ validity_dev_overrides_built (void)
 }
 
 const gchar *
-validity_data_dev_dir (void)
+fpi_validity_data_dev_dir (void)
 {
 #if VALIDITY_DEV_OVERRIDES
   return g_getenv (VALIDITY_DATA_DIR_ENV);
@@ -137,8 +137,8 @@ validity_data_dev_dir (void)
 }
 
 gchar **
-validity_data_resolve_search_paths (const gchar *dev_dir,
-                                    GError     **error)
+fpi_validity_data_resolve_search_paths (const gchar *dev_dir,
+                                        GError     **error)
 {
   if (dev_dir == NULL)
     return g_strdupv ((gchar **) validity_data_search_paths);
@@ -185,23 +185,23 @@ format_search_paths (gchar * const *paths,
  * ================================================================ */
 
 void
-validity_data_store_init (ValidityDataStore *store)
+fpi_validity_data_store_init (ValidityDataStore *store)
 {
   memset (store, 0, sizeof (*store));
 }
 
 void
-validity_data_store_free (ValidityDataStore *store)
+fpi_validity_data_store_free (ValidityDataStore *store)
 {
   for (gsize i = 0; i < VALIDITY_DATA_NUM_TAGS; i++)
     g_clear_pointer (&store->entries[i], g_bytes_unref);
 }
 
 gboolean
-validity_data_load_file (ValidityDataStore *store,
-                         ValidityDataTag    tag,
-                         const gchar       *filepath,
-                         GError           **error)
+fpi_validity_data_load_file (ValidityDataStore *store,
+                             ValidityDataTag    tag,
+                             const gchar       *filepath,
+                             GError           **error)
 {
   g_autofree guint8 *contents = NULL;
   gsize length = 0;
@@ -242,10 +242,10 @@ validity_data_load_file (ValidityDataStore *store,
 }
 
 gboolean
-validity_data_load_device (ValidityDataStore *store,
-                           guint16            vid,
-                           guint16            pid,
-                           GError           **error)
+fpi_validity_data_load_device (ValidityDataStore *store,
+                               guint16            vid,
+                               guint16            pid,
+                               GError           **error)
 {
   g_autofree gchar *subdir = g_strdup_printf ("%04x_%04x", vid, pid);
   g_autofree gchar *found_dir = NULL;
@@ -254,7 +254,7 @@ validity_data_load_device (ValidityDataStore *store,
 
   g_return_val_if_fail (store != NULL, FALSE);
 
-  paths = validity_data_resolve_search_paths (validity_data_dev_dir (), error);
+  paths = fpi_validity_data_resolve_search_paths (fpi_validity_data_dev_dir (), error);
   if (paths == NULL)
     return FALSE;
 
@@ -281,8 +281,8 @@ validity_data_load_device (ValidityDataStore *store,
               continue;
             }
 
-          if (!validity_data_load_file (store, (ValidityDataTag) i,
-                                        fpath, error))
+          if (!fpi_validity_data_load_file (store, (ValidityDataTag) i,
+                                            fpath, error))
             return FALSE;
         }
 
@@ -313,14 +313,14 @@ validity_data_load_device (ValidityDataStore *store,
 }
 
 gboolean
-validity_data_load_common (ValidityDataStore *store,
-                           GError           **error)
+fpi_validity_data_load_common (ValidityDataStore *store,
+                               GError           **error)
 {
   g_auto(GStrv) paths = NULL;
 
   g_return_val_if_fail (store != NULL, FALSE);
 
-  paths = validity_data_resolve_search_paths (validity_data_dev_dir (), error);
+  paths = fpi_validity_data_resolve_search_paths (fpi_validity_data_dev_dir (), error);
   if (paths == NULL)
     return FALSE;
 
@@ -338,7 +338,7 @@ validity_data_load_common (ValidityDataStore *store,
           if (!g_file_test (fpath, G_FILE_TEST_IS_REGULAR))
             continue;
 
-          if (!validity_data_load_file (store, tag, fpath, error))
+          if (!fpi_validity_data_load_file (store, tag, fpath, error))
             return FALSE;
 
           found = TRUE;
@@ -362,8 +362,8 @@ validity_data_load_common (ValidityDataStore *store,
 }
 
 GBytes *
-validity_data_get (const ValidityDataStore *store,
-                   ValidityDataTag          tag)
+fpi_validity_data_get (const ValidityDataStore *store,
+                       ValidityDataTag          tag)
 {
   g_return_val_if_fail (store != NULL, NULL);
   g_return_val_if_fail (tag < VALIDITY_DATA_NUM_TAGS, NULL);
@@ -372,13 +372,13 @@ validity_data_get (const ValidityDataStore *store,
 }
 
 const guint8 *
-validity_data_get_bytes (const ValidityDataStore *store,
-                         ValidityDataTag          tag,
-                         gsize                   *len)
+fpi_validity_data_get_bytes (const ValidityDataStore *store,
+                             ValidityDataTag          tag,
+                             gsize                   *len)
 {
   g_return_val_if_fail (len != NULL, NULL);
 
-  GBytes *bytes = validity_data_get (store, tag);
+  GBytes *bytes = fpi_validity_data_get (store, tag);
   if (!bytes)
     {
       *len = 0;

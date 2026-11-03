@@ -69,10 +69,10 @@ static const gchar *firmware_search_paths[] = {
  * ================================================================ */
 
 gboolean
-validity_fwext_parse_fw_info (const guint8   *data,
-                              gsize           data_len,
-                              guint16         status,
-                              ValidityFwInfo *info)
+fpi_validity_fwext_parse_fw_info (const guint8   *data,
+                                  gsize           data_len,
+                                  guint16         status,
+                                  ValidityFwInfo *info)
 {
   memset (info, 0, sizeof (*info));
 
@@ -211,9 +211,9 @@ static const struct
 };
 
 const gchar *
-validity_fwext_get_firmware_name (guint16       vid,
-                                  guint16       pid,
-                                  const gchar **source)
+fpi_validity_fwext_get_firmware_name (guint16       vid,
+                                      guint16       pid,
+                                      const gchar **source)
 {
   for (gsize i = 0; i < G_N_ELEMENTS (fwext_device_map); i++)
     {
@@ -231,12 +231,12 @@ validity_fwext_get_firmware_name (guint16       vid,
 }
 
 gchar *
-validity_fwext_find_firmware (guint16  vid,
-                              guint16  pid,
-                              GError **error)
+fpi_validity_fwext_find_firmware (guint16  vid,
+                                  guint16  pid,
+                                  GError **error)
 {
   const gchar *source = NULL;
-  const gchar *filename = validity_fwext_get_firmware_name (vid, pid, &source);
+  const gchar *filename = fpi_validity_fwext_get_firmware_name (vid, pid, &source);
 
   if (filename == NULL)
     {
@@ -271,9 +271,9 @@ validity_fwext_find_firmware (guint16  vid,
  * ================================================================ */
 
 gboolean
-validity_fwext_load_file (const gchar       *path,
-                          ValidityFwextFile *fwext,
-                          GError           **error)
+fpi_validity_fwext_load_file (const gchar       *path,
+                              ValidityFwextFile *fwext,
+                              GError           **error)
 {
   g_autofree guint8 *contents = NULL;
   gsize length = 0;
@@ -317,7 +317,7 @@ validity_fwext_load_file (const gchar       *path,
 }
 
 void
-validity_fwext_file_clear (ValidityFwextFile *fwext)
+fpi_validity_fwext_file_clear (ValidityFwextFile *fwext)
 {
   g_clear_pointer (&fwext->payload, g_free);
   fwext->payload_len = 0;
@@ -328,39 +328,39 @@ validity_fwext_file_clear (ValidityFwextFile *fwext)
  * ================================================================ */
 
 void
-validity_fwext_build_write_hw_reg32 (guint32 addr,
-                                     guint32 value,
-                                     guint8 *cmd,
-                                     gsize  *cmd_len)
+fpi_validity_fwext_build_write_hw_reg32 (guint32 addr,
+                                         guint32 value,
+                                         guint8 *cmd,
+                                         gsize  *cmd_len)
 {
   *cmd_len = validity_pack (cmd, 10, "bwwb",
                             VCSFW_CMD_WRITE_HW_REG32, addr, value, 4);
 }
 
 void
-validity_fwext_build_read_hw_reg32 (guint32 addr,
-                                    guint8 *cmd,
-                                    gsize  *cmd_len)
+fpi_validity_fwext_build_read_hw_reg32 (guint32 addr,
+                                        guint8 *cmd,
+                                        gsize  *cmd_len)
 {
   *cmd_len = validity_pack (cmd, 6, "bwb",
                             VCSFW_CMD_READ_HW_REG32, addr, 4);
 }
 
 gboolean
-validity_fwext_parse_read_hw_reg32 (const guint8 *data,
-                                    gsize         data_len,
-                                    guint32      *value)
+fpi_validity_fwext_parse_read_hw_reg32 (const guint8 *data,
+                                        gsize         data_len,
+                                        guint32      *value)
 {
   return validity_unpack (data, data_len, "w", value);
 }
 
 void
-validity_fwext_build_write_flash (guint8        partition,
-                                  guint32       offset,
-                                  const guint8 *data,
-                                  gsize         data_len,
-                                  guint8       *cmd,
-                                  gsize        *cmd_len)
+fpi_validity_fwext_build_write_flash (guint8        partition,
+                                      guint32       offset,
+                                      const guint8 *data,
+                                      gsize         data_len,
+                                      guint8       *cmd,
+                                      gsize        *cmd_len)
 {
   *cmd_len = validity_pack (cmd, 13 + data_len, "bbbhwwd",
                             VCSFW_CMD_WRITE_FLASH, partition, 1,
@@ -369,11 +369,11 @@ validity_fwext_build_write_flash (guint8        partition,
 }
 
 void
-validity_fwext_build_write_fw_sig (guint8        partition,
-                                   const guint8 *signature,
-                                   gsize         sig_len,
-                                   guint8       *cmd,
-                                   gsize        *cmd_len)
+fpi_validity_fwext_build_write_fw_sig (guint8        partition,
+                                       const guint8 *signature,
+                                       gsize         sig_len,
+                                       guint8       *cmd,
+                                       gsize        *cmd_len)
 {
   *cmd_len = validity_pack (cmd, 5 + sig_len, "bbxhd",
                             VCSFW_CMD_WRITE_FW_SIG, partition,
@@ -381,8 +381,8 @@ validity_fwext_build_write_fw_sig (guint8        partition,
 }
 
 void
-validity_fwext_build_reboot (guint8 *cmd,
-                             gsize  *cmd_len)
+fpi_validity_fwext_build_reboot (guint8 *cmd,
+                                 gsize  *cmd_len)
 {
   *cmd_len = validity_pack (cmd, 3, "bbb",
                             VCSFW_CMD_REBOOT, VCSFW_REBOOT_SUBCMD, 0x00);
@@ -393,12 +393,12 @@ validity_fwext_build_reboot (guint8 *cmd,
  * ================================================================ */
 
 const guint8 *
-validity_fwext_get_db_write_enable (FpiDeviceValidity *self,
-                                    gsize             *len)
+fpi_validity_fwext_get_db_write_enable (FpiDeviceValidity *self,
+                                        gsize             *len)
 {
-  return validity_data_get_bytes (&self->device_data,
-                                  VALIDITY_DATA_DB_WRITE_ENABLE,
-                                  len);
+  return fpi_validity_data_get_bytes (&self->device_data,
+                                      VALIDITY_DATA_DB_WRITE_ENABLE,
+                                      len);
 }
 
 /* ================================================================
@@ -429,7 +429,7 @@ fwext_upload_data_free (gpointer data)
 {
   FwextUploadData *ud = data;
 
-  validity_fwext_file_clear (&ud->fwext);
+  fpi_validity_fwext_file_clear (&ud->fwext);
   g_free (ud);
 }
 
@@ -449,9 +449,9 @@ fwext_recv_read_hw_reg (FpiSsm            *ssm,
 
   guint32 value;
 
-  if (!validity_fwext_parse_read_hw_reg32 (self->cmd_response_data,
-                                           self->cmd_response_len,
-                                           &value))
+  if (!fpi_validity_fwext_parse_read_hw_reg32 (self->cmd_response_data,
+                                               self->cmd_response_len,
+                                               &value))
     {
       fpi_ssm_mark_failed (ssm,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
@@ -487,7 +487,7 @@ fwext_load_file (FpiSsm            *ssm,
   ud->vid = vid;
   ud->pid = pid;
 
-  g_autofree gchar *fw_path = validity_fwext_find_firmware (vid, pid, &error);
+  g_autofree gchar *fw_path = fpi_validity_fwext_find_firmware (vid, pid, &error);
 
   if (fw_path == NULL)
     {
@@ -495,7 +495,7 @@ fwext_load_file (FpiSsm            *ssm,
       return;
     }
 
-  if (!validity_fwext_load_file (fw_path, &ud->fwext, &error))
+  if (!fpi_validity_fwext_load_file (fw_path, &ud->fwext, &error))
     {
       fpi_ssm_mark_failed (ssm, error);
       return;
@@ -512,7 +512,7 @@ fwext_send_db_write_enable (FpiSsm            *ssm,
                             FpiDeviceValidity *self)
 {
   gsize dbe_len;
-  const guint8 *dbe = validity_fwext_get_db_write_enable (self, &dbe_len);
+  const guint8 *dbe = fpi_validity_fwext_get_db_write_enable (self, &dbe_len);
 
   if (dbe == NULL || dbe_len == 0)
     {
@@ -523,7 +523,7 @@ fwext_send_db_write_enable (FpiSsm            *ssm,
       return;
     }
 
-  vcsfw_tls_cmd_send (self, ssm, dbe, dbe_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, dbe, dbe_len, NULL);
 }
 
 static void
@@ -539,11 +539,11 @@ fwext_send_write_chunk (FpiSsm            *ssm,
   g_autofree guint8 *cmd = g_malloc (13 + chunk_size);
   gsize cmd_len;
 
-  validity_fwext_build_write_flash (FWEXT_PARTITION,
-                                    (guint32) ud->write_offset,
-                                    ud->fwext.payload + ud->write_offset,
-                                    chunk_size,
-                                    cmd, &cmd_len);
+  fpi_validity_fwext_build_write_flash (FWEXT_PARTITION,
+                                        (guint32) ud->write_offset,
+                                        ud->fwext.payload + ud->write_offset,
+                                        chunk_size,
+                                        cmd, &cmd_len);
 
   fp_dbg ("FWEXT: Writing chunk at offset 0x%zx (%zu/%zu bytes)",
           ud->write_offset, ud->write_offset + chunk_size,
@@ -551,7 +551,7 @@ fwext_send_write_chunk (FpiSsm            *ssm,
 
   ud->write_offset += chunk_size;
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
 }
 
 static void
@@ -589,15 +589,15 @@ fwext_send_write_signature (FpiSsm            *ssm,
   guint8 cmd[5 + FWEXT_SIGNATURE_SIZE];
   gsize cmd_len;
 
-  validity_fwext_build_write_fw_sig (FWEXT_PARTITION,
-                                     ud->fwext.signature,
-                                     FWEXT_SIGNATURE_SIZE,
-                                     cmd, &cmd_len);
+  fpi_validity_fwext_build_write_fw_sig (FWEXT_PARTITION,
+                                         ud->fwext.signature,
+                                         FWEXT_SIGNATURE_SIZE,
+                                         cmd, &cmd_len);
 
   fp_info ("FWEXT: Writing firmware signature (%d bytes)",
            FWEXT_SIGNATURE_SIZE);
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
 }
 
 static void
@@ -606,10 +606,10 @@ fwext_recv_verify (FpiSsm            *ssm,
 {
   ValidityFwInfo info;
 
-  if (!validity_fwext_parse_fw_info (self->cmd_response_data,
-                                     self->cmd_response_len,
-                                     self->cmd_response_status,
-                                     &info) ||
+  if (!fpi_validity_fwext_parse_fw_info (self->cmd_response_data,
+                                         self->cmd_response_len,
+                                         self->cmd_response_status,
+                                         &info) ||
       !info.loaded)
     {
       fpi_ssm_mark_failed (ssm,
@@ -624,8 +624,8 @@ fwext_recv_verify (FpiSsm            *ssm,
 }
 
 void
-validity_fwext_upload_run_state (FpiSsm   *ssm,
-                                 FpDevice *dev)
+fpi_validity_fwext_upload_run_state (FpiSsm   *ssm,
+                                     FpDevice *dev)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
 
@@ -635,10 +635,10 @@ validity_fwext_upload_run_state (FpiSsm   *ssm,
       {
         guint8 cmd[10];
         gsize cmd_len;
-        validity_fwext_build_write_hw_reg32 (FWEXT_HW_REG_WRITE_ADDR,
-                                             FWEXT_HW_REG_WRITE_VALUE,
-                                             cmd, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_validity_fwext_build_write_hw_reg32 (FWEXT_HW_REG_WRITE_ADDR,
+                                                 FWEXT_HW_REG_WRITE_VALUE,
+                                                 cmd, &cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -658,9 +658,9 @@ validity_fwext_upload_run_state (FpiSsm   *ssm,
       {
         guint8 cmd[6];
         gsize cmd_len;
-        validity_fwext_build_read_hw_reg32 (FWEXT_HW_REG_READ_ADDR,
-                                            cmd, &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_validity_fwext_build_read_hw_reg32 (FWEXT_HW_REG_READ_ADDR,
+                                                cmd, &cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -709,7 +709,7 @@ validity_fwext_upload_run_state (FpiSsm   *ssm,
     case FWEXT_SEND_CLEANUP:
       {
         guint8 cmd[] = { VCSFW_CMD_CLEANUP };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
       }
       break;
 
@@ -737,7 +737,7 @@ validity_fwext_upload_run_state (FpiSsm   *ssm,
     case FWEXT_SEND_VERIFY:
       {
         guint8 cmd[] = { VCSFW_CMD_GET_FW_INFO, FWEXT_PARTITION };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
       }
       break;
 
@@ -749,9 +749,9 @@ validity_fwext_upload_run_state (FpiSsm   *ssm,
       {
         guint8 cmd[3];
         gsize cmd_len;
-        validity_fwext_build_reboot (cmd, &cmd_len);
+        fpi_validity_fwext_build_reboot (cmd, &cmd_len);
         fp_info ("FWEXT: Rebooting sensor to activate new firmware");
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -765,12 +765,12 @@ validity_fwext_upload_run_state (FpiSsm   *ssm,
 /* ---- SSM factory ---- */
 
 FpiSsm *
-validity_fwext_upload_ssm_new (FpDevice *dev)
+fpi_validity_fwext_upload_ssm_new (FpDevice *dev)
 {
   FpiSsm *ssm;
   FwextUploadData *ud;
 
-  ssm = fpi_ssm_new (dev, validity_fwext_upload_run_state,
+  ssm = fpi_ssm_new (dev, fpi_validity_fwext_upload_run_state,
                      FWEXT_NUM_STATES);
   ud = g_new0 (FwextUploadData, 1);
   fpi_ssm_set_data (ssm, ud, fwext_upload_data_free);

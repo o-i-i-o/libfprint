@@ -78,9 +78,9 @@ typedef struct
 
 /* Look up device descriptor by ValidityDeviceType enum.
  * Returns NULL if dev_type is out of range. */
-const ValidityDeviceDesc *validity_hal_device_lookup (guint dev_type);
+const ValidityDeviceDesc *fpi_validity_hal_device_lookup (guint dev_type);
 
 /* Look up device descriptor by USB VID/PID.
  * Returns NULL if no matching entry. */
-const ValidityDeviceDesc *validity_hal_device_lookup_by_pid (guint16 vid,
-                                                             guint16 pid);
+const ValidityDeviceDesc *fpi_validity_hal_device_lookup_by_pid (guint16 vid,
+                                                                 guint16 pid);

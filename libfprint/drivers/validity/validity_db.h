@@ -151,11 +151,11 @@ typedef struct
   gsize    hash_len;
 } ValidityMatchResult;
 
-void validity_match_result_clear (ValidityMatchResult *result);
+void fpi_validity_match_result_clear (ValidityMatchResult *result);
 
-gboolean validity_parse_match_result (const guint8        *data,
-                                      gsize                data_len,
-                                      ValidityMatchResult *result);
+gboolean fpi_validity_parse_match_result (const guint8        *data,
+                                          gsize                data_len,
+                                          ValidityMatchResult *result);
 
 /* ================================================================
  * Command builders — produce binary TLS command payloads
@@ -164,34 +164,34 @@ gboolean validity_parse_match_result (const guint8        *data,
  * ================================================================ */
 
 /* cmd 0x4B: Get user storage by name */
-guint8 *validity_db_build_cmd_get_user_storage (const gchar *name,
-                                                gsize       *out_len);
+guint8 *fpi_validity_db_build_cmd_get_user_storage (const gchar *name,
+                                                    gsize       *out_len);
 
 /* cmd 0x4A: Get user by dbid */
-guint8 *validity_db_build_cmd_get_user (guint16 dbid,
-                                        gsize  *out_len);
+guint8 *fpi_validity_db_build_cmd_get_user (guint16 dbid,
+                                            gsize  *out_len);
 
 /* cmd 0x47: New record */
-guint8 *validity_db_build_cmd_new_record (guint16       parent,
-                                          guint16       type,
-                                          guint16       storage,
-                                          const guint8 *data,
-                                          gsize         data_len,
-                                          gsize        *out_len);
+guint8 *fpi_validity_db_build_cmd_new_record (guint16       parent,
+                                              guint16       type,
+                                              guint16       storage,
+                                              const guint8 *data,
+                                              gsize         data_len,
+                                              gsize        *out_len);
 
 /* cmd 0x48: Delete record */
-guint8 *validity_db_build_cmd_del_record (guint16 dbid,
-                                          gsize  *out_len);
+guint8 *fpi_validity_db_build_cmd_del_record (guint16 dbid,
+                                              gsize  *out_len);
 
 /* cmd 0x1a: Call cleanups (commit pending writes) */
-guint8 *validity_db_build_cmd_call_cleanups (gsize *out_len);
+guint8 *fpi_validity_db_build_cmd_call_cleanups (gsize *out_len);
 
 /* User record DB partition -- erase this to reclaim flash after 0x04b5. */
 #define VALIDITY_DB_PARTITION 4
-guint8 *validity_db_build_cmd_erase_flash (guint8 partition,
-                                           gsize *out_len);
+guint8 *fpi_validity_db_build_cmd_erase_flash (guint8 partition,
+                                               gsize *out_len);
 
-guint8 *validity_db_build_cmd_db_info (gsize *out_len);
+guint8 *fpi_validity_db_build_cmd_db_info (gsize *out_len);
 
 /* ================================================================
  * Response parsers — parse binary TLS response payloads
@@ -200,30 +200,30 @@ guint8 *validity_db_build_cmd_db_info (gsize *out_len);
  * Return TRUE on success, FALSE on parse error.
  * ================================================================ */
 
-gboolean validity_db_parse_info (const guint8   *data,
-                                 gsize           data_len,
-                                 ValidityDbInfo *out);
+gboolean fpi_validity_db_parse_info (const guint8   *data,
+                                     gsize           data_len,
+                                     ValidityDbInfo *out);
 
-gboolean validity_db_parse_user_storage (const guint8        *data,
-                                         gsize                data_len,
-                                         ValidityUserStorage *out);
+gboolean fpi_validity_db_parse_user_storage (const guint8        *data,
+                                             gsize                data_len,
+                                             ValidityUserStorage *out);
 
-gboolean validity_db_parse_user (const guint8 *data,
-                                 gsize         data_len,
-                                 ValidityUser *out);
+gboolean fpi_validity_db_parse_user (const guint8 *data,
+                                     gsize         data_len,
+                                     ValidityUser *out);
 
-gboolean validity_db_parse_record_value (const guint8     *data,
-                                         gsize             data_len,
-                                         ValidityDbRecord *out);
+gboolean fpi_validity_db_parse_record_value (const guint8     *data,
+                                             gsize             data_len,
+                                             ValidityDbRecord *out);
 
-gboolean validity_db_parse_record_children (const guint8           *data,
-                                            gsize                   data_len,
-                                            ValidityRecordChildren *out);
+gboolean fpi_validity_db_parse_record_children (const guint8           *data,
+                                                gsize                   data_len,
+                                                ValidityRecordChildren *out);
 
 /* cmd 0x47 response: parse new record ID */
-gboolean validity_db_parse_new_record_id (const guint8 *data,
-                                          gsize         data_len,
-                                          guint16      *out_record_id);
+gboolean fpi_validity_db_parse_new_record_id (const guint8 *data,
+                                              gsize         data_len,
+                                              guint16      *out_record_id);
 
 /* ================================================================
  * Identity helpers
@@ -231,45 +231,45 @@ gboolean validity_db_parse_new_record_id (const guint8 *data,
 
 /* Build an identity blob from an id string, suitable for the sensor DB.
  * Returns a buffer of at least VALIDITY_IDENTITY_MIN_SIZE bytes. */
-guint8 *validity_db_build_identity (const gchar *id_str,
-                                    gsize       *out_len);
+guint8 *fpi_validity_db_build_identity (const gchar *id_str,
+                                        gsize       *out_len);
 
 /* Extract the id bytes from a user record's identity (the inverse of
  * validity_db_build_identity). @out_id points into @user->identity. */
-gboolean validity_db_user_get_id (const ValidityUser *user,
-                                  const guint8      **out_id,
-                                  gsize              *out_id_len);
+gboolean fpi_validity_db_user_get_id (const ValidityUser *user,
+                                      const guint8      **out_id,
+                                      gsize              *out_id_len);
 
 /* Build finger data payload for new_finger (format from make_finger_data) */
-guint8 *validity_db_build_finger_data (guint16       subtype,
-                                       const guint8 *template_data,
-                                       gsize         template_len,
-                                       const guint8 *tid,
-                                       gsize         tid_len,
-                                       gsize        *out_len);
+guint8 *fpi_validity_db_build_finger_data (guint16       subtype,
+                                           const guint8 *template_data,
+                                           gsize         template_len,
+                                           const guint8 *tid,
+                                           gsize         tid_len,
+                                           gsize        *out_len);
 
 /* ================================================================
  * Structure cleanup helpers
  * ================================================================ */
 
-void validity_db_info_clear (ValidityDbInfo *info);
-void validity_user_storage_clear (ValidityUserStorage *storage);
-void validity_user_clear (ValidityUser *user);
-void validity_db_record_clear (ValidityDbRecord *record);
-void validity_record_children_clear (ValidityRecordChildren *children);
+void fpi_validity_db_info_clear (ValidityDbInfo *info);
+void fpi_validity_user_storage_clear (ValidityUserStorage *storage);
+void fpi_validity_user_clear (ValidityUser *user);
+void fpi_validity_db_record_clear (ValidityDbRecord *record);
+void fpi_validity_record_children_clear (ValidityRecordChildren *children);
 
 /* ================================================================
  * Enrollment commands
  * ================================================================ */
 
 /* cmd 0x69: Create enrollment (start) / End enrollment */
-guint8 *validity_db_build_cmd_create_enrollment (gboolean start,
-                                                 gsize   *out_len);
+guint8 *fpi_validity_db_build_cmd_create_enrollment (gboolean start,
+                                                     gsize   *out_len);
 
 /* cmd 0x6B: Enrollment update (with template data) */
-guint8 *validity_db_build_cmd_enrollment_update (const guint8 *prev_data,
-                                                 gsize         prev_len,
-                                                 gsize        *out_len);
+guint8 *fpi_validity_db_build_cmd_enrollment_update (const guint8 *prev_data,
+                                                     gsize         prev_len,
+                                                     gsize        *out_len);
 
 /* ================================================================
  * Match commands (inlined at call sites in verify/enroll SSMs)
@@ -281,5 +281,5 @@ guint8 *validity_db_build_cmd_enrollment_update (const guint8 *prev_data,
 
 typedef struct _FpiDeviceValidity FpiDeviceValidity;
 
-const guint8 *validity_db_get_write_enable_blob (FpiDeviceValidity *self,
-                                                 gsize             *out_len);
+const guint8 *fpi_validity_db_get_write_enable_blob (FpiDeviceValidity *self,
+                                                     gsize             *out_len);

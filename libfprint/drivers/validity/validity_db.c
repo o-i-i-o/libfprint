@@ -38,14 +38,14 @@
  * ================================================================ */
 
 void
-validity_db_info_clear (ValidityDbInfo *info)
+fpi_validity_db_info_clear (ValidityDbInfo *info)
 {
   g_clear_pointer (&info->roots, g_free);
   memset (info, 0, sizeof (*info));
 }
 
 void
-validity_user_storage_clear (ValidityUserStorage *storage)
+fpi_validity_user_storage_clear (ValidityUserStorage *storage)
 {
   g_clear_pointer (&storage->name, g_free);
   g_clear_pointer (&storage->user_dbids, g_free);
@@ -54,14 +54,14 @@ validity_user_storage_clear (ValidityUserStorage *storage)
 }
 
 void
-validity_match_result_clear (ValidityMatchResult *result)
+fpi_validity_match_result_clear (ValidityMatchResult *result)
 {
   g_clear_pointer (&result->hash, g_free);
   memset (result, 0, sizeof (*result));
 }
 
 void
-validity_user_clear (ValidityUser *user)
+fpi_validity_user_clear (ValidityUser *user)
 {
   g_clear_pointer (&user->identity, g_free);
   g_clear_pointer (&user->fingers, g_free);
@@ -69,14 +69,14 @@ validity_user_clear (ValidityUser *user)
 }
 
 void
-validity_db_record_clear (ValidityDbRecord *record)
+fpi_validity_db_record_clear (ValidityDbRecord *record)
 {
   g_clear_pointer (&record->value, g_free);
   memset (record, 0, sizeof (*record));
 }
 
 void
-validity_record_children_clear (ValidityRecordChildren *children)
+fpi_validity_record_children_clear (ValidityRecordChildren *children)
 {
   g_clear_pointer (&children->children, g_free);
   memset (children, 0, sizeof (*children));
@@ -92,8 +92,8 @@ validity_record_children_clear (ValidityRecordChildren *children)
 /* cmd 0x4B: Get user storage
  * Format: 0x4B | dbid(2LE) | name_len(2LE) | name(NUL-terminated) */
 guint8 *
-validity_db_build_cmd_get_user_storage (const gchar *name,
-                                        gsize       *out_len)
+fpi_validity_db_build_cmd_get_user_storage (const gchar *name,
+                                            gsize       *out_len)
 {
   gsize name_len = 0;
 
@@ -110,8 +110,8 @@ validity_db_build_cmd_get_user_storage (const gchar *name,
 /* cmd 0x4A: Get user by dbid
  * Format: 0x4A | dbid(2LE) | 0(2LE) | 0(2LE) */
 guint8 *
-validity_db_build_cmd_get_user (guint16 dbid,
-                                gsize  *out_len)
+fpi_validity_db_build_cmd_get_user (guint16 dbid,
+                                    gsize  *out_len)
 {
   return validity_pack_new (out_len, "bhhh",
                             VCSFW_CMD_GET_USER, dbid, 0, 0);
@@ -120,12 +120,12 @@ validity_db_build_cmd_get_user (guint16 dbid,
 /* cmd 0x47: New record
  * Format: 0x47 | parent(2LE) | type(2LE) | storage(2LE) | data_len(2LE) | data */
 guint8 *
-validity_db_build_cmd_new_record (guint16       parent,
-                                  guint16       type,
-                                  guint16       storage,
-                                  const guint8 *data,
-                                  gsize         data_len,
-                                  gsize        *out_len)
+fpi_validity_db_build_cmd_new_record (guint16       parent,
+                                      guint16       type,
+                                      guint16       storage,
+                                      const guint8 *data,
+                                      gsize         data_len,
+                                      gsize        *out_len)
 {
   return validity_pack_new (out_len, "bhhhhd",
                             VCSFW_CMD_NEW_RECORD,
@@ -137,8 +137,8 @@ validity_db_build_cmd_new_record (guint16       parent,
 /* cmd 0x48: Delete record
  * Format: 0x48 | dbid(2LE) */
 guint8 *
-validity_db_build_cmd_del_record (guint16 dbid,
-                                  gsize  *out_len)
+fpi_validity_db_build_cmd_del_record (guint16 dbid,
+                                      gsize  *out_len)
 {
   return validity_pack_new (out_len, "bh",
                             VCSFW_CMD_DEL_RECORD, dbid);
@@ -146,14 +146,14 @@ validity_db_build_cmd_del_record (guint16 dbid,
 
 /* cmd 0x1a: Call cleanups (commit pending writes) */
 guint8 *
-validity_db_build_cmd_call_cleanups (gsize *out_len)
+fpi_validity_db_build_cmd_call_cleanups (gsize *out_len)
 {
   return validity_pack_new (out_len, "b", 0x1a);
 }
 
 /* cmd 0x45: Query DB partition info (total/used/free bytes, record count). */
 guint8 *
-validity_db_build_cmd_db_info (gsize *out_len)
+fpi_validity_db_build_cmd_db_info (gsize *out_len)
 {
   return validity_pack_new (out_len, "b", VCSFW_CMD_DB_INFO);
 }
@@ -163,8 +163,8 @@ validity_db_build_cmd_db_info (gsize *out_len)
  * del_record, so the partition fills with 0x04b5). Must be bracketed by
  * db_write_enable + call_cleanups. Format: 0x3f | partition(1). */
 guint8 *
-validity_db_build_cmd_erase_flash (guint8 partition,
-                                   gsize *out_len)
+fpi_validity_db_build_cmd_erase_flash (guint8 partition,
+                                       gsize *out_len)
 {
   return validity_pack_new (out_len, "bb",
                             VCSFW_CMD_ERASE_FLASH, partition);
@@ -174,8 +174,8 @@ validity_db_build_cmd_erase_flash (guint8 partition,
  * Format: 0x69 | flag(4LE)
  * start=TRUE: flag=1, start=FALSE: flag=0 */
 guint8 *
-validity_db_build_cmd_create_enrollment (gboolean start,
-                                         gsize   *out_len)
+fpi_validity_db_build_cmd_create_enrollment (gboolean start,
+                                             gsize   *out_len)
 {
   return validity_pack_new (out_len, "bw",
                             VCSFW_CMD_CREATE_ENROLLMENT,
@@ -185,9 +185,9 @@ validity_db_build_cmd_create_enrollment (gboolean start,
 /* cmd 0x6B: Enrollment update (with template data)
  * Format: 0x6B | prev_data */
 guint8 *
-validity_db_build_cmd_enrollment_update (const guint8 *prev_data,
-                                         gsize         prev_len,
-                                         gsize        *out_len)
+fpi_validity_db_build_cmd_enrollment_update (const guint8 *prev_data,
+                                             gsize         prev_len,
+                                             gsize        *out_len)
 {
   return validity_pack_new (out_len, "bd",
                             VCSFW_CMD_ENROLLMENT_UPDATE,
@@ -203,9 +203,9 @@ validity_db_build_cmd_enrollment_update (const guint8 *prev_data,
 
 /* Parse DB info response (cmd 0x45) */
 gboolean
-validity_db_parse_info (const guint8   *data,
-                        gsize           data_len,
-                        ValidityDbInfo *out)
+fpi_validity_db_parse_info (const guint8   *data,
+                            gsize           data_len,
+                            ValidityDbInfo *out)
 {
   FpiByteReader reader;
 
@@ -242,7 +242,7 @@ validity_db_parse_info (const guint8   *data,
         {
           if (!fpi_byte_reader_get_uint16_le (&reader, &out->roots[i]))
             {
-              validity_db_info_clear (out);
+              fpi_validity_db_info_clear (out);
               return FALSE;
             }
         }
@@ -255,9 +255,9 @@ validity_db_parse_info (const guint8   *data,
  * Format: recid(2LE) usercnt(2LE) namesz(2LE) unknown(2LE)
  *         usrtab[usercnt * 4 bytes] name[namesz bytes] */
 gboolean
-validity_db_parse_user_storage (const guint8        *data,
-                                gsize                data_len,
-                                ValidityUserStorage *out)
+fpi_validity_db_parse_user_storage (const guint8        *data,
+                                    gsize                data_len,
+                                    ValidityUserStorage *out)
 {
   FpiByteReader reader;
   guint16 name_sz, unknown;
@@ -292,7 +292,7 @@ validity_db_parse_user_storage (const guint8        *data,
           if (!fpi_byte_reader_get_uint16_le (&reader, &out->user_dbids[i]) ||
               !fpi_byte_reader_get_uint16_le (&reader, &out->user_val_sizes[i]))
             {
-              validity_user_storage_clear (out);
+              fpi_validity_user_storage_clear (out);
               return FALSE;
             }
         }
@@ -304,7 +304,7 @@ validity_db_parse_user_storage (const guint8        *data,
       const guint8 *name_data;
       if (!fpi_byte_reader_get_data (&reader, name_sz, &name_data))
         {
-          validity_user_storage_clear (out);
+          fpi_validity_user_storage_clear (out);
           return FALSE;
         }
       out->name = g_strndup ((const gchar *) name_data, name_sz);
@@ -317,9 +317,9 @@ validity_db_parse_user_storage (const guint8        *data,
  * Format: recid(2LE) fingercnt(2LE) unknown(2LE) identitysz(2LE)
  *         fingertab[8 * fingercnt] identity[identitysz] */
 gboolean
-validity_db_parse_user (const guint8 *data,
-                        gsize         data_len,
-                        ValidityUser *out)
+fpi_validity_db_parse_user (const guint8 *data,
+                            gsize         data_len,
+                            ValidityUser *out)
 {
   FpiByteReader reader;
   guint16 unknown, identity_sz;
@@ -354,7 +354,7 @@ validity_db_parse_user (const guint8 *data,
               !fpi_byte_reader_get_uint16_le (&reader, &out->fingers[i].storage) ||
               !fpi_byte_reader_get_uint16_le (&reader, &out->fingers[i].value_size))
             {
-              validity_user_clear (out);
+              fpi_validity_user_clear (out);
               return FALSE;
             }
         }
@@ -366,7 +366,7 @@ validity_db_parse_user (const guint8 *data,
       const guint8 *id_data;
       if (!fpi_byte_reader_get_data (&reader, identity_sz, &id_data))
         {
-          validity_user_clear (out);
+          fpi_validity_user_clear (out);
           return FALSE;
         }
       out->identity = g_memdup2 (id_data, identity_sz);
@@ -379,9 +379,9 @@ validity_db_parse_user (const guint8 *data,
 /* Parse record value response (cmd 0x49)
  * Format: dbid(2LE) type(2LE) storage(2LE) sz(2LE) pad(2bytes) value[sz] */
 gboolean
-validity_db_parse_record_value (const guint8     *data,
-                                gsize             data_len,
-                                ValidityDbRecord *out)
+fpi_validity_db_parse_record_value (const guint8     *data,
+                                    gsize             data_len,
+                                    ValidityDbRecord *out)
 {
   FpiByteReader reader;
   guint16 sz;
@@ -415,7 +415,7 @@ validity_db_parse_record_value (const guint8     *data,
       const guint8 *val_data;
       if (!fpi_byte_reader_get_data (&reader, sz, &val_data))
         {
-          validity_db_record_clear (out);
+          fpi_validity_db_record_clear (out);
           return FALSE;
         }
       out->value = g_memdup2 (val_data, sz);
@@ -429,9 +429,9 @@ validity_db_parse_record_value (const guint8     *data,
  * Format: dbid(2LE) type(2LE) storage(2LE) sz(2LE) cnt(2LE) pad(2bytes)
  *         children[cnt * 4 bytes: dbid(2LE) type(2LE)] */
 gboolean
-validity_db_parse_record_children (const guint8           *data,
-                                   gsize                   data_len,
-                                   ValidityRecordChildren *out)
+fpi_validity_db_parse_record_children (const guint8           *data,
+                                       gsize                   data_len,
+                                       ValidityRecordChildren *out)
 {
   FpiByteReader reader;
   guint16 sz, pad;
@@ -469,7 +469,7 @@ validity_db_parse_record_children (const guint8           *data,
           if (!fpi_byte_reader_get_uint16_le (&reader, &out->children[i].dbid) ||
               !fpi_byte_reader_get_uint16_le (&reader, &out->children[i].type))
             {
-              validity_record_children_clear (out);
+              fpi_validity_record_children_clear (out);
               return FALSE;
             }
         }
@@ -481,9 +481,9 @@ validity_db_parse_record_children (const guint8           *data,
 /* Parse new record response (cmd 0x47)
  * Format: record_id(2LE) */
 gboolean
-validity_db_parse_new_record_id (const guint8 *data,
-                                 gsize         data_len,
-                                 guint16      *out_record_id)
+fpi_validity_db_parse_new_record_id (const guint8 *data,
+                                     gsize         data_len,
+                                     guint16      *out_record_id)
 {
   g_return_val_if_fail (data != NULL, FALSE);
   g_return_val_if_fail (out_record_id != NULL, FALSE);
@@ -503,8 +503,8 @@ validity_db_parse_new_record_id (const guint8 *data,
  *
  * Format: type(4LE) | len(4LE) | id_bytes(len) | padding */
 guint8 *
-validity_db_build_identity (const gchar *id_str,
-                            gsize       *out_len)
+fpi_validity_db_build_identity (const gchar *id_str,
+                                gsize       *out_len)
 {
   FpiByteWriter writer;
   gsize id_len;
@@ -535,9 +535,9 @@ validity_db_build_identity (const gchar *id_str,
  * identity, or it is malformed or empty. The bytes are not validated as
  * UTF-8 or NUL-free; compare them by length and content. */
 gboolean
-validity_db_user_get_id (const ValidityUser *user,
-                         const guint8      **out_id,
-                         gsize              *out_id_len)
+fpi_validity_db_user_get_id (const ValidityUser *user,
+                             const guint8      **out_id,
+                             gsize              *out_id_len)
 {
   FpiByteReader reader;
   guint32 id_type, id_len;
@@ -569,12 +569,12 @@ validity_db_user_get_id (const ValidityUser *user,
  *   tag2=2(2LE) | len(2LE) | tid
  *   padding[0x20 bytes] */
 guint8 *
-validity_db_build_finger_data (guint16       subtype,
-                               const guint8 *template_data,
-                               gsize         template_len,
-                               const guint8 *tid,
-                               gsize         tid_len,
-                               gsize        *out_len)
+fpi_validity_db_build_finger_data (guint16       subtype,
+                                   const guint8 *template_data,
+                                   gsize         template_len,
+                                   const guint8 *tid,
+                                   gsize         tid_len,
+                                   gsize        *out_len)
 {
   FpiByteWriter writer;
   gsize template_block = 4 + template_len;  /* tag(2) + len(2) + data */
@@ -614,9 +614,9 @@ validity_db_build_finger_data (guint16       subtype,
  * ================================================================ */
 
 const guint8 *
-validity_db_get_write_enable_blob (FpiDeviceValidity *self, gsize *out_len)
+fpi_validity_db_get_write_enable_blob (FpiDeviceValidity *self, gsize *out_len)
 {
-  return validity_data_get_bytes (&self->device_data,
-                                  VALIDITY_DATA_DB_WRITE_ENABLE,
-                                  out_len);
+  return fpi_validity_data_get_bytes (&self->device_data,
+                                      VALIDITY_DATA_DB_WRITE_ENABLE,
+                                      out_len);
 }

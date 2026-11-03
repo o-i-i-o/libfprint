@@ -134,7 +134,7 @@ verify_interrupt_cb (FpiUsbTransfer *transfer,
        * (a fresh read there would hang waiting for a type-3 that already
        * arrived). */
       if (int_type == 3 && self->sensor.device_info &&
-          validity_sensor_skips_finger_down (self->sensor.real_sensor_type))
+          fpi_validity_sensor_skips_finger_down (self->sensor.real_sensor_type))
         {
           if (transfer->actual_length >= 3 &&
               (transfer->buffer[2] & VALIDITY_INT_SCAN_COMPLETE))
@@ -211,7 +211,7 @@ typedef ValidityMatchResult MatchResult;
 static void
 match_result_clear (MatchResult *r)
 {
-  validity_match_result_clear (r);
+  fpi_validity_match_result_clear (r);
 }
 
 /**
@@ -235,9 +235,9 @@ match_result_clear (MatchResult *r)
  *          if the dict was empty), %FALSE on malformed data.
  */
 gboolean
-validity_parse_match_result (const guint8        *data,
-                             gsize                data_len,
-                             ValidityMatchResult *result)
+fpi_validity_parse_match_result (const guint8        *data,
+                                 gsize                data_len,
+                                 ValidityMatchResult *result)
 {
   FpiByteReader reader;
   guint16 total_len;
@@ -334,7 +334,7 @@ print_owns_record (FpPrint            *print,
   if (print_id_len == 0)
     return FALSE;
 
-  return validity_db_user_get_id (user, &record_id, &record_id_len) &&
+  return fpi_validity_db_user_get_id (user, &record_id, &record_id_len) &&
          record_id_len == print_id_len &&
          memcmp (record_id, print_id, print_id_len) == 0;
 }
@@ -363,9 +363,9 @@ print_owns_record (FpPrint            *print,
  * Returns: %TRUE if the chip's match is a match for @print
  */
 gboolean
-validity_print_matches_record (FpPrint                   *print,
-                               const ValidityMatchResult *match,
-                               const ValidityUser        *user)
+fpi_validity_print_matches_record (FpPrint                   *print,
+                                   const ValidityMatchResult *match,
+                                   const ValidityUser        *user)
 {
   gboolean has_finger = FALSE;
 
@@ -378,7 +378,7 @@ validity_print_matches_record (FpPrint                   *print,
   if (!print_owns_record (print, user))
     return FALSE;
 
-  if (validity_finger_to_subtype (fp_print_get_finger (print)) != match->subtype)
+  if (fpi_validity_finger_to_subtype (fp_print_get_finger (print)) != match->subtype)
     return FALSE;
 
   for (guint16 i = 0; i < user->finger_count; i++)
@@ -402,9 +402,9 @@ validity_print_matches_record (FpPrint                   *print,
  * Returns: (nullable): the matching FpPrint, or %NULL if none corresponds
  */
 FpPrint *
-validity_find_gallery_match (GPtrArray                 *gallery,
-                             const ValidityMatchResult *match,
-                             const ValidityUser        *user)
+fpi_validity_find_gallery_match (GPtrArray                 *gallery,
+                                 const ValidityMatchResult *match,
+                                 const ValidityUser        *user)
 {
   if (!gallery)
     return NULL;
@@ -413,7 +413,7 @@ validity_find_gallery_match (GPtrArray                 *gallery,
     {
       FpPrint *candidate = g_ptr_array_index (gallery, i);
 
-      if (validity_print_matches_record (candidate, match, user))
+      if (fpi_validity_print_matches_record (candidate, match, user))
         return candidate;
     }
 
@@ -441,12 +441,12 @@ validity_find_gallery_match (GPtrArray                 *gallery,
  *   (identify) matched, %FPI_MATCH_FAIL otherwise
  */
 FpiMatchResult
-validity_match_decide (gboolean                   identify,
-                       FpPrint                   *print,
-                       GPtrArray                 *gallery,
-                       const ValidityMatchResult *match,
-                       const ValidityUser        *user,
-                       FpPrint                  **out_gallery_match)
+fpi_validity_match_decide (gboolean                   identify,
+                           FpPrint                   *print,
+                           GPtrArray                 *gallery,
+                           const ValidityMatchResult *match,
+                           const ValidityUser        *user,
+                           FpPrint                  **out_gallery_match)
 {
   FpPrint *gallery_match = NULL;
   gboolean matched = FALSE;
@@ -455,12 +455,12 @@ validity_match_decide (gboolean                   identify,
     {
       if (identify)
         {
-          gallery_match = validity_find_gallery_match (gallery, match, user);
+          gallery_match = fpi_validity_find_gallery_match (gallery, match, user);
           matched = (gallery_match != NULL);
         }
       else
         {
-          matched = validity_print_matches_record (print, match, user);
+          matched = fpi_validity_print_matches_record (print, match, user);
         }
     }
 
@@ -480,15 +480,15 @@ validity_match_decide (gboolean                   identify,
  *   get_user (cmd 0x4a) can address, in @out_dbid
  */
 gboolean
-validity_match_user_to_read (const guint8 *data,
-                             gsize         data_len,
-                             guint16      *out_dbid)
+fpi_validity_match_user_to_read (const guint8 *data,
+                                 gsize         data_len,
+                                 guint16      *out_dbid)
 {
   MatchResult match = { 0 };
   gboolean have_match = FALSE;
 
   if (data && data_len > 0)
-    if (validity_parse_match_result (data, data_len, &match))
+    if (fpi_validity_parse_match_result (data, data_len, &match))
       have_match = match.matched;
 
   if (have_match && match.user_dbid <= G_MAXUINT16)
@@ -509,11 +509,11 @@ validity_match_user_to_read (const guint8 *data,
  * get_user responses. Run when an attempt starts and when it ends.
  */
 void
-validity_verify_clear_match_state (FpiDeviceValidity *self)
+fpi_validity_verify_clear_match_state (FpiDeviceValidity *self)
 {
   g_clear_pointer (&self->bulk_data, g_free);
   self->bulk_data_len = 0;
-  validity_user_clear (&self->verify_match_user);
+  fpi_validity_user_clear (&self->verify_match_user);
 }
 
 /* ================================================================
@@ -525,10 +525,10 @@ verify_build_capture (FpiSsm            *ssm,
                       FpiDeviceValidity *self)
 {
   gsize cmd_len;
-  guint8 *cmd = validity_capture_build_cmd_02 (&self->capture,
-                                               self->sensor.type_info,
-                                               VALIDITY_CAPTURE_IDENTIFY,
-                                               &cmd_len);
+  guint8 *cmd = fpi_validity_capture_build_cmd_02 (&self->capture,
+                                                   self->sensor.type_info,
+                                                   VALIDITY_CAPTURE_IDENTIFY,
+                                                   &cmd_len);
 
   if (!cmd)
     {
@@ -538,7 +538,7 @@ verify_build_capture (FpiSsm            *ssm,
       return;
     }
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -605,8 +605,8 @@ verify_get_match_user (FpiSsm            *ssm,
    * with the print(s) being matched. Nothing to read on a no-match. */
   guint16 user_dbid;
 
-  if (!validity_match_user_to_read (self->bulk_data, self->bulk_data_len,
-                                    &user_dbid))
+  if (!fpi_validity_match_user_to_read (self->bulk_data, self->bulk_data_len,
+                                        &user_dbid))
     {
       fpi_ssm_jump_to_state (ssm, VERIFY_DONE);
       return;
@@ -614,8 +614,8 @@ verify_get_match_user (FpiSsm            *ssm,
 
   {
     gsize cmd_len;
-    guint8 *cmd = validity_db_build_cmd_get_user (user_dbid, &cmd_len);
-    vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+    guint8 *cmd = fpi_validity_db_build_cmd_get_user (user_dbid, &cmd_len);
+    fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
     g_free (cmd);
   }
 }
@@ -628,9 +628,9 @@ verify_get_match_user_recv (FpiSsm            *ssm,
    * print: the match is reported as no match. */
   if (self->cmd_response_status != VCSFW_STATUS_OK ||
       !self->cmd_response_data ||
-      !validity_db_parse_user (self->cmd_response_data,
-                               self->cmd_response_len,
-                               &self->verify_match_user))
+      !fpi_validity_db_parse_user (self->cmd_response_data,
+                                   self->cmd_response_len,
+                                   &self->verify_match_user))
     fp_warn ("Could not read the matched user record (status=0x%04x)",
              self->cmd_response_status);
 
@@ -650,11 +650,11 @@ verify_run_state (FpiSsm   *ssm,
       self->verify_recapture = FALSE;
       /* The match decision must come from this attempt's get_match_result
        * alone; drop anything an earlier action left behind. */
-      validity_verify_clear_match_state (self);
+      fpi_validity_verify_clear_match_state (self);
       {
         gsize cmd_len;
-        const guint8 *cmd = validity_capture_glow_start_cmd (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        const guint8 *cmd = fpi_validity_capture_glow_start_cmd (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -685,7 +685,7 @@ verify_run_state (FpiSsm   *ssm,
     case VERIFY_GET_PRG_STATUS:
       {
         const guint8 cmd[] = { 0x51, 0x00, 0x20, 0x00, 0x00 };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
       }
       break;
 
@@ -733,7 +733,7 @@ verify_run_state (FpiSsm   *ssm,
     case VERIFY_CAPTURE_STOP:
       {
         const guint8 cmd[] = { 0x04 };
-        vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, sizeof (cmd), NULL);
       }
       break;
 
@@ -758,7 +758,7 @@ verify_run_state (FpiSsm   *ssm,
         guint8 *cmd = validity_pack_new (&cmd_len, "bbbhhhhh",
                                          VCSFW_CMD_MATCH_FINGER,
                                          0x02, 0xFF, 0, 0, 1, 0, 0);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -778,7 +778,7 @@ verify_run_state (FpiSsm   *ssm,
         guint8 *cmd = validity_pack_new (&cmd_len, "bw",
                                          VCSFW_CMD_GET_MATCH_RESULT,
                                          (guint32) 0);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -793,7 +793,7 @@ verify_run_state (FpiSsm   *ssm,
         guint8 *cmd = validity_pack_new (&cmd_len, "bw",
                                          VCSFW_CMD_MATCH_CLEANUP,
                                          (guint32) 0);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -806,8 +806,8 @@ verify_run_state (FpiSsm   *ssm,
     case VERIFY_LED_OFF:
       {
         gsize cmd_len;
-        const guint8 *cmd = validity_capture_glow_end_cmd (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        const guint8 *cmd = fpi_validity_capture_glow_end_cmd (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
       }
       break;
 
@@ -842,9 +842,9 @@ verify_reconnect_done (FpiDeviceValidity *self,
       fp_info ("Reconnected -- retrying %s", identify ? "identify" : "verify");
       self->recovery_redispatch = TRUE;
       if (identify)
-        validity_identify (dev);
+        fpi_validity_identify (dev);
       else
-        validity_verify (dev);
+        fpi_validity_verify (dev);
       return;
     }
 
@@ -867,18 +867,18 @@ verify_ssm_done (FpiSsm   *ssm,
 
   if (error)
     {
-      validity_verify_clear_match_state (self);
+      fpi_validity_verify_clear_match_state (self);
 
       /* Recoverable mid-operation reset? Reconnect and retry instead of
        * failing the action (bounded; a true removal falls through). */
-      if (validity_recover_or_fail (self, error, verify_reconnect_done,
-                                    GINT_TO_POINTER (self->identify_mode)))
+      if (fpi_validity_recover_or_fail (self, error, verify_reconnect_done,
+                                        GINT_TO_POINTER (self->identify_mode)))
         {
           g_error_free (error);
           return;
         }
 
-      error = validity_map_removed_error (error);
+      error = fpi_validity_map_removed_error (error);
       if (self->identify_mode)
         fpi_device_identify_complete (dev, error);
       else
@@ -895,7 +895,7 @@ verify_ssm_done (FpiSsm   *ssm,
   FpiMatchResult result;
 
   if (self->bulk_data && self->bulk_data_len > 0)
-    if (validity_parse_match_result (self->bulk_data, self->bulk_data_len, &match))
+    if (fpi_validity_parse_match_result (self->bulk_data, self->bulk_data_len, &match))
       have_match = match.matched;
 
   if (self->identify_mode)
@@ -906,9 +906,9 @@ verify_ssm_done (FpiSsm   *ssm,
   /* The chip matched against every template it holds, so a match is only a
    * match for the print(s) being checked if the matched user record belongs
    * to one of them (see validity_match_decide). */
-  result = validity_match_decide (self->identify_mode, print, gallery,
-                                  have_match ? &match : NULL,
-                                  &self->verify_match_user, &gallery_match);
+  result = fpi_validity_match_decide (self->identify_mode, print, gallery,
+                                      have_match ? &match : NULL,
+                                      &self->verify_match_user, &gallery_match);
 
   if (self->identify_mode)
     {
@@ -944,7 +944,7 @@ verify_ssm_done (FpiSsm   *ssm,
     }
 
   match_result_clear (&match);
-  validity_verify_clear_match_state (self);
+  fpi_validity_verify_clear_match_state (self);
 }
 
 /* ================================================================
@@ -1034,7 +1034,7 @@ emulation_clear_storage (FpDevice *device)
 }
 
 void
-validity_verify (FpDevice *device)
+fpi_validity_verify (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
   FpiSsm *ssm;
@@ -1065,7 +1065,7 @@ validity_verify (FpDevice *device)
 }
 
 void
-validity_identify (FpDevice *device)
+fpi_validity_identify (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
   FpiSsm *ssm;
@@ -1103,12 +1103,12 @@ list_get_storage (FpiSsm            *ssm,
                   FpiDeviceValidity *self)
 {
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_get_user_storage (
+  guint8 *cmd = fpi_validity_db_build_cmd_get_user_storage (
     VALIDITY_STORAGE_NAME, &cmd_len);
 
   self->list_user_idx = 0;
   memset (&self->list_storage, 0, sizeof (self->list_storage));
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1125,9 +1125,9 @@ list_get_storage_recv (FpiSsm            *ssm,
     }
 
   if (!self->cmd_response_data ||
-      !validity_db_parse_user_storage (self->cmd_response_data,
-                                       self->cmd_response_len,
-                                       &self->list_storage))
+      !fpi_validity_db_parse_user_storage (self->cmd_response_data,
+                                           self->cmd_response_len,
+                                           &self->list_storage))
     {
       fp_info ("Failed to parse user storage — no enrolled prints");
       fpi_ssm_jump_to_state (ssm, LIST_DONE);
@@ -1161,8 +1161,8 @@ list_get_user (FpiSsm            *ssm,
   guint16 user_dbid = self->list_storage.user_dbids[self->list_user_idx];
 
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_get_user (user_dbid, &cmd_len);
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  guint8 *cmd = fpi_validity_db_build_cmd_get_user (user_dbid, &cmd_len);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1178,14 +1178,14 @@ list_get_user_recv (FpiSsm            *ssm,
     {
       ValidityUser user = { 0 };
 
-      if (validity_db_parse_user (self->cmd_response_data,
-                                  self->cmd_response_len,
-                                  &user))
+      if (fpi_validity_db_parse_user (self->cmd_response_data,
+                                      self->cmd_response_len,
+                                      &user))
         {
           for (guint16 i = 0; i < user.finger_count; i++)
             {
               FpPrint *print = fp_print_new (dev);
-              gint finger = validity_subtype_to_finger (
+              gint finger = fpi_validity_subtype_to_finger (
                 user.fingers[i].subtype);
 
               fpi_print_set_type (print, FPI_PRINT_RAW);
@@ -1201,7 +1201,7 @@ list_get_user_recv (FpiSsm            *ssm,
                 const guint8 *id_bytes = NULL;
                 gsize id_len = 0;
 
-                if (validity_db_user_get_id (&user, &id_bytes, &id_len))
+                if (fpi_validity_db_user_get_id (&user, &id_bytes, &id_len))
                   {
                     g_autofree gchar *id =
                       g_strndup ((const gchar *) id_bytes, id_len);
@@ -1220,7 +1220,7 @@ list_get_user_recv (FpiSsm            *ssm,
               g_ptr_array_add (prints_array, print);
             }
 
-          validity_user_clear (&user);
+          fpi_validity_user_clear (&user);
         }
     }
 
@@ -1270,11 +1270,11 @@ list_ssm_done (FpiSsm   *ssm,
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
   GPtrArray *prints_array = fpi_ssm_get_data (ssm);
 
-  validity_user_storage_clear (&self->list_storage);
+  fpi_validity_user_storage_clear (&self->list_storage);
 
   if (error)
     {
-      fpi_device_list_complete (dev, NULL, validity_map_removed_error (error));
+      fpi_device_list_complete (dev, NULL, fpi_validity_map_removed_error (error));
       return;
     }
 
@@ -1286,7 +1286,7 @@ list_ssm_done (FpiSsm   *ssm,
 }
 
 void
-validity_list (FpDevice *device)
+fpi_validity_list (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
   FpiSsm *ssm;
@@ -1331,17 +1331,17 @@ validity_list (FpDevice *device)
  * Returns: %TRUE if @user holds @print; the out parameters are set only then
  */
 gboolean
-validity_delete_find_finger (FpPrint            *print,
-                             const ValidityUser *user,
-                             guint16            *out_finger_dbid,
-                             gboolean           *out_leaves_empty)
+fpi_validity_delete_find_finger (FpPrint            *print,
+                                 const ValidityUser *user,
+                                 guint16            *out_finger_dbid,
+                                 gboolean           *out_leaves_empty)
 {
   guint16 subtype;
 
   if (!print || !user || !print_owns_record (print, user))
     return FALSE;
 
-  subtype = validity_finger_to_subtype (fp_print_get_finger (print));
+  subtype = fpi_validity_finger_to_subtype (fp_print_get_finger (print));
   if (subtype == 0)
     return FALSE;
 
@@ -1373,9 +1373,9 @@ validity_delete_find_finger (FpPrint            *print,
  * Returns: %TRUE if @user may be deleted
  */
 gboolean
-validity_delete_owner_is_empty (FpPrint            *print,
-                                guint16             owner_dbid,
-                                const ValidityUser *user)
+fpi_validity_delete_owner_is_empty (FpPrint            *print,
+                                    guint16             owner_dbid,
+                                    const ValidityUser *user)
 {
   if (!print || !user)
     return FALSE;
@@ -1391,10 +1391,10 @@ delete_get_storage (FpiSsm            *ssm,
                     FpiDeviceValidity *self)
 {
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_get_user_storage (
+  guint8 *cmd = fpi_validity_db_build_cmd_get_user_storage (
     VALIDITY_STORAGE_NAME, &cmd_len);
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1412,11 +1412,11 @@ delete_get_storage_recv (FpiSsm            *ssm,
     }
 
   /* Parse into list_storage (shared with list SSM, not concurrent) */
-  validity_user_storage_clear (&self->list_storage);
+  fpi_validity_user_storage_clear (&self->list_storage);
   if (!self->cmd_response_data ||
-      !validity_db_parse_user_storage (self->cmd_response_data,
-                                       self->cmd_response_len,
-                                       &self->list_storage))
+      !fpi_validity_db_parse_user_storage (self->cmd_response_data,
+                                           self->cmd_response_len,
+                                           &self->list_storage))
     {
       fpi_ssm_mark_failed (ssm,
                            fpi_device_error_new (FP_DEVICE_ERROR_DATA_NOT_FOUND));
@@ -1431,7 +1431,7 @@ delete_get_storage_recv (FpiSsm            *ssm,
     fpi_device_get_delete_data (dev, &print);
 
     FpFinger finger = fp_print_get_finger (print);
-    self->delete_finger_subtype = validity_finger_to_subtype (finger);
+    self->delete_finger_subtype = fpi_validity_finger_to_subtype (finger);
   }
 
   self->list_user_idx = 0;
@@ -1487,8 +1487,8 @@ delete_lookup_user (FpiSsm            *ssm,
   {
     guint16 user_dbid = self->list_storage.user_dbids[self->list_user_idx];
     gsize cmd_len;
-    guint8 *cmd = validity_db_build_cmd_get_user (user_dbid, &cmd_len);
-    vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+    guint8 *cmd = fpi_validity_db_build_cmd_get_user (user_dbid, &cmd_len);
+    fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
     g_free (cmd);
   }
 }
@@ -1504,9 +1504,9 @@ delete_lookup_user_recv (FpiSsm            *ssm,
       self->cmd_response_data)
     {
       ValidityUser user = { 0 };
-      if (validity_db_parse_user (self->cmd_response_data,
-                                  self->cmd_response_len,
-                                  &user))
+      if (fpi_validity_db_parse_user (self->cmd_response_data,
+                                      self->cmd_response_len,
+                                      &user))
         {
           self->delete_total_fingers += user.finger_count;
 
@@ -1515,15 +1515,15 @@ delete_lookup_user_recv (FpiSsm            *ssm,
               FpPrint *print = NULL;
 
               fpi_device_get_delete_data (FP_DEVICE (self), &print);
-              if (validity_delete_find_finger (print, &user,
-                                               &self->delete_finger_dbid,
-                                               &self->delete_owner_empties))
+              if (fpi_validity_delete_find_finger (print, &user,
+                                                   &self->delete_finger_dbid,
+                                                   &self->delete_owner_empties))
                 {
                   self->delete_owner_dbid = user.dbid;
                   self->delete_found = TRUE;
                 }
             }
-          validity_user_clear (&user);
+          fpi_validity_user_clear (&user);
         }
       else
         {
@@ -1547,10 +1547,10 @@ delete_del_record (FpiSsm            *ssm,
   /* Delete the finger record via cmd 0x48
    * python-validity: db.del_record(dbid) */
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_del_record (
+  guint8 *cmd = fpi_validity_db_build_cmd_del_record (
     self->delete_finger_dbid, &cmd_len);
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1585,10 +1585,10 @@ delete_get_owner (FpiSsm            *ssm,
                   FpiDeviceValidity *self)
 {
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_get_user (self->delete_owner_dbid,
-                                                &cmd_len);
+  guint8 *cmd = fpi_validity_db_build_cmd_get_user (self->delete_owner_dbid,
+                                                    &cmd_len);
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1604,16 +1604,16 @@ delete_get_owner_recv (FpiSsm            *ssm,
 
   if (self->cmd_response_status == VCSFW_STATUS_OK &&
       self->cmd_response_data &&
-      validity_db_parse_user (self->cmd_response_data,
-                              self->cmd_response_len,
-                              &user))
+      fpi_validity_db_parse_user (self->cmd_response_data,
+                                  self->cmd_response_len,
+                                  &user))
     {
-      empty = validity_delete_owner_is_empty (print, self->delete_owner_dbid,
-                                              &user);
+      empty = fpi_validity_delete_owner_is_empty (print, self->delete_owner_dbid,
+                                                  &user);
       if (!empty)
         fp_warn ("Delete: user record %u still holds %u finger(s) -- keeping it",
                  self->delete_owner_dbid, user.finger_count);
-      validity_user_clear (&user);
+      fpi_validity_user_clear (&user);
     }
   else
     {
@@ -1634,10 +1634,10 @@ delete_del_owner (FpiSsm            *ssm,
   /* Same command python-validity's DeleteEnrolledFingers sends for a user
    * record: db.del_record(usr.dbid) */
   gsize cmd_len;
-  guint8 *cmd = validity_db_build_cmd_del_record (self->delete_owner_dbid,
-                                                  &cmd_len);
+  guint8 *cmd = fpi_validity_db_build_cmd_del_record (self->delete_owner_dbid,
+                                                      &cmd_len);
 
-  vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+  fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
   g_free (cmd);
 }
 
@@ -1739,7 +1739,7 @@ delete_ssm_done (FpiSsm   *ssm,
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
 
-  validity_user_storage_clear (&self->list_storage);
+  fpi_validity_user_storage_clear (&self->list_storage);
 
   /* Deleting the last enrolled print only removes the record; the on-chip DB
    * never compacts, so the flash stays occupied. When we just deleted the last
@@ -1768,11 +1768,11 @@ delete_ssm_done (FpiSsm   *ssm,
       g_clear_error (&error);
     }
 
-  fpi_device_delete_complete (dev, validity_map_removed_error (error));
+  fpi_device_delete_complete (dev, fpi_validity_map_removed_error (error));
 }
 
 void
-validity_delete (FpDevice *device)
+fpi_validity_delete (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
   FpiSsm *ssm;
@@ -1828,8 +1828,8 @@ clear_run_state (FpiSsm   *ssm,
     case CLEAR_DB_WRITE_ENABLE:
       {
         gsize blob_len;
-        const guint8 *blob = validity_db_get_write_enable_blob (self, &blob_len);
-        vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
+        const guint8 *blob = fpi_validity_db_get_write_enable_blob (self, &blob_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, blob, blob_len, NULL);
       }
       break;
 
@@ -1848,9 +1848,9 @@ clear_run_state (FpiSsm   *ssm,
     case CLEAR_ERASE:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_erase_flash (VALIDITY_DB_PARTITION,
-                                                         &cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_erase_flash (VALIDITY_DB_PARTITION,
+                                                             &cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1872,8 +1872,8 @@ clear_run_state (FpiSsm   *ssm,
     case CLEAR_CLEANUPS:
       {
         gsize cmd_len;
-        guint8 *cmd = validity_db_build_cmd_call_cleanups (&cmd_len);
-        vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
+        guint8 *cmd = fpi_validity_db_build_cmd_call_cleanups (&cmd_len);
+        fpi_vcsfw_tls_cmd_send (self, ssm, cmd, cmd_len, NULL);
         g_free (cmd);
       }
       break;
@@ -1895,12 +1895,12 @@ clear_ssm_done (FpiSsm   *ssm,
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (dev);
 
-  validity_user_storage_clear (&self->list_storage);
-  fpi_device_clear_storage_complete (dev, validity_map_removed_error (error));
+  fpi_validity_user_storage_clear (&self->list_storage);
+  fpi_device_clear_storage_complete (dev, fpi_validity_map_removed_error (error));
 }
 
 void
-validity_clear_storage (FpDevice *device)
+fpi_validity_clear_storage (FpDevice *device)
 {
   FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
   FpiSsm *ssm;
