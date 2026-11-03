@@ -20,6 +20,8 @@
 
 #define FP_COMPONENT "validity"
 
+#include <config.h>
+
 #include "drivers_api.h"
 #include "validity_pack.h"
 #include "validity.h"
@@ -32,7 +34,11 @@
 #include <openssl/err.h>
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /* ================================================================
  * TLS PRF (P_SHA256) — Standard TLS 1.2 PRF with HMAC-SHA256
@@ -250,6 +256,226 @@ validity_tls_derive_psk (ValidityTlsState *tls)
   validity_tls_derive_psk_from_files (tls,
                                       "/sys/class/dmi/id/product_name",
                                       "/sys/class/dmi/id/product_serial");
+}
+
+/* ================================================================
+ * Developer-only DMI serial override
+ *
+ * Built only with meson -Dvalidity_dev=true. The serial is the secret
+ * half of the pairing identity (product_serial is readable by root
+ * only), so the override file is held to the standard of a private key
+ * file and every failure is fatal: a wrong value would only make the key
+ * check refuse the sensor, but a silent fallback would hide the mistake.
+ * ================================================================ */
+
+#define SERIAL_FILE_MAX_SIZE 256
+
+const gchar *
+validity_tls_dev_serial_file (void)
+{
+#if VALIDITY_DEV_OVERRIDES
+  return g_getenv (VALIDITY_DMI_SERIAL_FILE_ENV);
+#else
+  return NULL;
+#endif
+}
+
+void
+validity_tls_free_secret_string (gchar *secret)
+{
+  if (secret == NULL)
+    return;
+
+  OPENSSL_cleanse (secret, strlen (secret));
+  g_free (secret);
+}
+
+/* Wipe and free a secret whose allocation is @alloc_len bytes (not just
+ * up to its NUL: g_strstrip() moves the text to the front and leaves the
+ * old tail behind the new NUL) */
+static void
+free_secret_buffer (gchar *secret,
+                    gsize  alloc_len)
+{
+  if (secret == NULL)
+    return;
+
+  OPENSSL_cleanse (secret, alloc_len);
+  g_free (secret);
+}
+
+gboolean
+validity_tls_read_serial_file (const gchar *path,
+                               gchar      **serial_out,
+                               GError     **error)
+{
+  guint8 buf[SERIAL_FILE_MAX_SIZE + 1];
+  struct stat st;
+  gssize n = 0;
+  gsize total = 0;
+  gchar *raw;
+  gchar *serial;
+  int fd;
+
+  g_return_val_if_fail (serial_out != NULL, FALSE);
+  *serial_out = NULL;
+
+  if (path == NULL || !g_path_is_absolute (path))
+    {
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file: '%s' is not an absolute path",
+                   path ? path : "(null)");
+      return FALSE;
+    }
+
+  /* O_NONBLOCK: opening a FIFO must not block the main loop until a
+   * writer appears (the S_ISREG check below then refuses it); it changes
+   * nothing for a regular file */
+  fd = open (path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NOCTTY | O_NONBLOCK);
+  if (fd < 0)
+    {
+      int err = errno;
+
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s cannot be opened: %s%s", path,
+                   g_strerror (err),
+                   err == ELOOP ? " (symbolic links are not accepted)" : "");
+      return FALSE;
+    }
+
+  if (fstat (fd, &st) != 0 || !S_ISREG (st.st_mode))
+    {
+      close (fd);
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s is not a regular file", path);
+      return FALSE;
+    }
+
+  if (st.st_uid != getuid () || (st.st_mode & (S_IRWXG | S_IRWXO)) != 0)
+    {
+      close (fd);
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s must be owned by the current user "
+                   "and not accessible to group or others (chmod 600)",
+                   path);
+      return FALSE;
+    }
+
+  while (total < sizeof (buf))
+    {
+      n = read (fd, buf + total, sizeof (buf) - total);
+      if (n < 0 && errno == EINTR)
+        continue;
+      if (n <= 0)
+        break;
+      total += n;
+    }
+  close (fd);
+
+  if (n < 0)
+    {
+      OPENSSL_cleanse (buf, sizeof (buf));
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s cannot be read", path);
+      return FALSE;
+    }
+
+  if (total > SERIAL_FILE_MAX_SIZE)
+    {
+      OPENSSL_cleanse (buf, sizeof (buf));
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s is larger than %d bytes", path,
+                   SERIAL_FILE_MAX_SIZE);
+      return FALSE;
+    }
+
+  raw = g_strndup ((const gchar *) buf, total);    /* total + 1 bytes */
+  OPENSSL_cleanse (buf, sizeof (buf));
+
+  /* A NUL inside the file would silently cut the value short */
+  if (strlen (raw) != total)
+    {
+      free_secret_buffer (raw, total + 1);
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s contains a NUL byte", path);
+      return FALSE;
+    }
+
+  /* Same normalisation as the sysfs value: strip surrounding whitespace.
+   * Keep an exact-size copy, so that validity_tls_free_secret_string()
+   * wipes all of it, and wipe the whole original buffer. */
+  serial = g_strdup (g_strstrip (raw));
+  free_secret_buffer (raw, total + 1);
+
+  if (*serial == '\0')
+    {
+      validity_tls_free_secret_string (serial);
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "DMI serial file %s is empty", path);
+      return FALSE;
+    }
+
+  for (const gchar *c = serial; *c != '\0'; c++)
+    {
+      if (*c < 0x20 || *c > 0x7e)
+        {
+          validity_tls_free_secret_string (serial);
+          g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                       "DMI serial file %s must hold one line of printable "
+                       "ASCII", path);
+          return FALSE;
+        }
+    }
+
+  *serial_out = serial;
+  return TRUE;
+}
+
+gboolean
+validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
+                                          const gchar      *name_path,
+                                          const gchar      *serial_path,
+                                          GError          **error)
+{
+  g_autofree gchar *product_name = NULL;
+  gchar *serial = NULL;
+
+  g_autoptr(GError) local_error = NULL;
+
+  if (!g_file_get_contents (name_path, &product_name, NULL, &local_error))
+    {
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL,
+                   "Cannot read the DMI product name: %s",
+                   local_error->message);
+      return FALSE;
+    }
+  g_strstrip (product_name);
+
+  if (!validity_tls_read_serial_file (serial_path, &serial, error))
+    return FALSE;
+
+  validity_tls_derive_psk_from_identity (tls, product_name, serial);
+  validity_tls_free_secret_string (serial);
+
+  /* Never log the serial itself */
+  fp_info ("PSK derived from DMI: product=\"%s\", serial from the developer "
+           "override file", product_name);
+  return TRUE;
+}
+
+gboolean
+validity_tls_derive_psk_checked (ValidityTlsState *tls,
+                                 GError          **error)
+{
+  const gchar *serial_file = validity_tls_dev_serial_file ();
+
+  if (serial_file != NULL)
+    return validity_tls_derive_psk_with_serial_file (tls,
+                                                     "/sys/class/dmi/id/product_name",
+                                                     serial_file, error);
+
+  validity_tls_derive_psk (tls);
+  return TRUE;
 }
 
 /* ================================================================

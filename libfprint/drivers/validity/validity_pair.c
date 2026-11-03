@@ -26,6 +26,7 @@
 #include "drivers_api.h"
 #include "fpi-byte-utils.h"
 #include "validity.h"
+#include "validity_a2.h"
 #include "validity_pack.h"
 #include "validity_data.h"
 #include "validity_pair.h"
@@ -233,6 +234,24 @@ validity_pair_decide (guint16               num_partitions,
     default:
       return VALIDITY_PAIR_REFUSE_UNREADABLE;
     }
+}
+
+ValidityPairDecision
+validity_pair_decide_for_policy (guint16               num_partitions,
+                                 ValidityTlsFlashClass flash,
+                                 gboolean              check_only,
+                                 gboolean              allow_provisioning)
+{
+  ValidityPairDecision decision = validity_pair_decide (num_partitions, flash,
+                                                        check_only);
+
+  /* PROVISION is only ever decided at 0 partitions; refuse that whole case
+   * (also from a reconnect) for a type that is never provisioned. */
+  if (!allow_provisioning &&
+      (num_partitions == 0 || decision == VALIDITY_PAIR_PROVISION))
+    return VALIDITY_PAIR_REFUSE_POLICY;
+
+  return decision;
 }
 
 /* ================================================================
@@ -817,6 +836,15 @@ pair_apply_decision (FpiSsm            *ssm,
                                              "started from an in-driver reconnect"));
       return;
 
+    case VALIDITY_PAIR_REFUSE_POLICY:
+      pair_refuse (ssm, self,
+                   fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                             "The sensor reports no flash "
+                                             "partitions. This driver never "
+                                             "provisions (partitions and pairs) "
+                                             "this sensor model"));
+      return;
+
     default:
       /* Fail closed: only an explicit PROVISION may start pairing */
       pair_refuse (ssm, self,
@@ -827,7 +855,19 @@ pair_apply_decision (FpiSsm            *ssm,
       return;
     }
 
-  /* Only VALIDITY_PAIR_PROVISION gets here. Look up device descriptor */
+  /* Only VALIDITY_PAIR_PROVISION gets here, which
+   * validity_pair_decide_for_policy() never returns for a type that is not
+   * provisioned. Check the policy again before the first write anyway. */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_provisioning)
+    {
+      pair_refuse (ssm, self,
+                   fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                             "This driver never provisions "
+                                             "this sensor model"));
+      return;
+    }
+
+  /* Look up device descriptor */
   ps->dev_desc = validity_hal_device_lookup (self->dev_type);
   if (!ps->dev_desc)
     {
@@ -878,8 +918,9 @@ pair_check_needed (FpiSsm            *ssm,
     }
 
   /* No partitions: partition 1 is not read, so decide straight away */
-  ps->decision = validity_pair_decide (0, VALIDITY_TLS_FLASH_UNREADABLE,
-                                       ps->check_only);
+  ps->decision = validity_pair_decide_for_policy (
+    0, VALIDITY_TLS_FLASH_UNREADABLE, ps->check_only,
+    fpi_validity_device_policy (self->dev_type)->allow_provisioning);
   pair_apply_decision (ssm, self);
 }
 
@@ -893,8 +934,9 @@ pair_verify_tls_recv (FpiSsm            *ssm,
   flash = validity_pair_classify_tls_flash (self->cmd_response_status,
                                             self->cmd_response_data,
                                             self->cmd_response_len);
-  ps->decision = validity_pair_decide (ps->num_partitions, flash,
-                                       ps->check_only);
+  ps->decision = validity_pair_decide_for_policy (
+    ps->num_partitions, flash, ps->check_only,
+    fpi_validity_device_policy (self->dev_type)->allow_provisioning);
   pair_apply_decision (ssm, self);
 }
 
@@ -904,6 +946,17 @@ pair_send_reset_blob (FpiSsm            *ssm,
 {
   gsize reset_len;
   const guint8 *reset_data;
+
+  /* Last line of defence: never reset a device type that is not provisioned
+   * (no reset.bin is shipped for 06cb:00a2 either) */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_provisioning)
+    {
+      pair_refuse (ssm, self,
+                   fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                             "This driver never sends the reset "
+                                             "blob to this sensor model"));
+      return;
+    }
 
   /* Send reset_blob via raw USB (python-validity: usb.cmd(reset_blob)) */
   reset_data = validity_data_get_bytes (&self->device_data,

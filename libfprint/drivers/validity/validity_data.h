@@ -63,6 +63,23 @@ typedef struct
 /* Search paths for data files (defined in validity_data.c) */
 extern const gchar *validity_data_search_paths[];
 
+/* Developer-only overrides (meson -Dvalidity_dev=true). In other builds
+ * the environment variables are never read. */
+#define VALIDITY_DATA_DIR_ENV "FP_VALIDITY_DATA_DIR"
+
+/* TRUE if this build honours the developer overrides */
+gboolean validity_dev_overrides_built (void);
+
+/* The FP_VALIDITY_DATA_DIR value in a developer build, else NULL */
+const gchar *validity_data_dev_dir (void);
+
+/* The search paths to use: validity_data_search_paths when @dev_dir is
+ * NULL, else @dev_dir alone (never a fallback to the system paths). Fails
+ * if @dev_dir is not an absolute path to a directory. Free with
+ * g_strfreev(). */
+gchar  **validity_data_resolve_search_paths (const gchar *dev_dir,
+                                             GError     **error);
+
 /* Initialize a data store (all entries NULL) */
 void     validity_data_store_init (ValidityDataStore *store);
 

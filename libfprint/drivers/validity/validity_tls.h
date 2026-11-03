@@ -170,6 +170,40 @@ void     validity_tls_derive_psk_from_identity (ValidityTlsState *tls,
                                                 const gchar      *product_name,
                                                 const gchar      *product_serial);
 
+/* Developer-only DMI serial override (meson -Dvalidity_dev=true): the
+ * path in FP_VALIDITY_DMI_SERIAL_FILE replaces the root-only
+ * /sys/class/dmi/id/product_serial, so a development session can run as
+ * the user. In other builds the variable is never read. */
+#define VALIDITY_DMI_SERIAL_FILE_ENV "FP_VALIDITY_DMI_SERIAL_FILE"
+
+/* The FP_VALIDITY_DMI_SERIAL_FILE value in a developer build, else NULL */
+const gchar *validity_tls_dev_serial_file (void);
+
+/* Read a DMI serial from @path, failing closed: absolute path, regular
+ * file (not a symlink) owned by the current user with no group or other
+ * permissions, at most 256 bytes, one non-empty line of printable ASCII
+ * once surrounding whitespace is stripped (as for sysfs). The value is
+ * never logged or put into @error. Free *@serial_out with
+ * validity_tls_free_secret_string(). */
+gboolean validity_tls_read_serial_file (const gchar *path,
+                                        gchar      **serial_out,
+                                        GError     **error);
+void     validity_tls_free_secret_string (gchar *secret);
+
+/* Derive the PSK from the product name in @name_path and the serial in
+ * @serial_path (validity_tls_read_serial_file()). Fails closed: no
+ * VirtualBox/0 fallback. */
+gboolean validity_tls_derive_psk_with_serial_file (ValidityTlsState *tls,
+                                                   const gchar      *name_path,
+                                                   const gchar      *serial_path,
+                                                   GError          **error);
+
+/* validity_tls_derive_psk(), or, in a developer build with
+ * FP_VALIDITY_DMI_SERIAL_FILE set, validity_tls_derive_psk_with_serial_file()
+ * on the sysfs product name; FALSE (with @error) only in the latter case. */
+gboolean validity_tls_derive_psk_checked (ValidityTlsState *tls,
+                                          GError          **error);
+
 gboolean validity_tls_parse_flash (ValidityTlsState *tls,
                                    const guint8     *data,
                                    gsize             data_len,

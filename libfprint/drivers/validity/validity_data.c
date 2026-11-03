@@ -20,6 +20,8 @@
 
 #define FP_COMPONENT "validity"
 
+#include <config.h>
+
 #include "validity_data.h"
 #include "fpi-log.h"
 #include "fp-device.h"
@@ -105,14 +107,68 @@ verify_hmac (const guint8 *data,
   return diff == 0;
 }
 
-/* Comma-separated list of the search paths, each with @subdir appended when
- * it is not NULL, for error messages: names exactly what was probed. */
+/* ================================================================
+ * Developer-only data directory override
+ *
+ * Built only with meson -Dvalidity_dev=true, for running an uninstalled
+ * data package from a development tree. When FP_VALIDITY_DATA_DIR is set
+ * it is the only place searched: a developer session never silently picks
+ * up other files from the system paths, and a bad value fails the open.
+ * ================================================================ */
+
+gboolean
+validity_dev_overrides_built (void)
+{
+#if VALIDITY_DEV_OVERRIDES
+  return TRUE;
+#else
+  return FALSE;
+#endif
+}
+
+const gchar *
+validity_data_dev_dir (void)
+{
+#if VALIDITY_DEV_OVERRIDES
+  return g_getenv (VALIDITY_DATA_DIR_ENV);
+#else
+  return NULL;
+#endif
+}
+
+gchar **
+validity_data_resolve_search_paths (const gchar *dev_dir,
+                                    GError     **error)
+{
+  if (dev_dir == NULL)
+    return g_strdupv ((gchar **) validity_data_search_paths);
+
+  if (!g_path_is_absolute (dev_dir) ||
+      !g_file_test (dev_dir, G_FILE_TEST_IS_DIR))
+    {
+      g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND,
+                   "%s='%s' is not an absolute path to a directory",
+                   VALIDITY_DATA_DIR_ENV, dev_dir);
+      return NULL;
+    }
+
+  fp_info ("Developer override: validity data only from %s", dev_dir);
+  {
+    gchar *paths[] = { (gchar *) dev_dir, NULL };
+
+    return g_strdupv (paths);
+  }
+}
+
+/* Comma-separated list of @paths, each with @subdir appended when it is
+ * not NULL, for error messages: names exactly what was probed. */
 static gchar *
-format_search_paths (const gchar *subdir)
+format_search_paths (gchar * const *paths,
+                     const gchar   *subdir)
 {
   GString *str = g_string_new (NULL);
 
-  for (const gchar **base = validity_data_search_paths; *base != NULL; base++)
+  for (gchar * const *base = paths; *base != NULL; base++)
     {
       g_autofree gchar *path = g_build_filename (*base, subdir, NULL);
 
@@ -194,9 +250,15 @@ validity_data_load_device (ValidityDataStore *store,
   g_autofree gchar *subdir = g_strdup_printf ("%04x_%04x", vid, pid);
   g_autofree gchar *found_dir = NULL;
 
+  g_auto(GStrv) paths = NULL;
+
   g_return_val_if_fail (store != NULL, FALSE);
 
-  for (const gchar **base = validity_data_search_paths; *base != NULL; base++)
+  paths = validity_data_resolve_search_paths (validity_data_dev_dir (), error);
+  if (paths == NULL)
+    return FALSE;
+
+  for (gchar **base = paths; *base != NULL; base++)
     {
       g_autofree gchar *dir_path = g_build_filename (*base, subdir, NULL);
 
@@ -230,7 +292,7 @@ validity_data_load_device (ValidityDataStore *store,
 
   if (found_dir == NULL)
     {
-      g_autofree gchar *probed = format_search_paths (subdir);
+      g_autofree gchar *probed = format_search_paths (paths, subdir);
 
       g_set_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND,
                    "Device data files not found for %04x:%04x (looked for "
@@ -254,7 +316,13 @@ gboolean
 validity_data_load_common (ValidityDataStore *store,
                            GError           **error)
 {
+  g_auto(GStrv) paths = NULL;
+
   g_return_val_if_fail (store != NULL, FALSE);
+
+  paths = validity_data_resolve_search_paths (validity_data_dev_dir (), error);
+  if (paths == NULL)
+    return FALSE;
 
   for (gsize i = 0; i < G_N_ELEMENTS (common_file_map); i++)
     {
@@ -262,8 +330,7 @@ validity_data_load_common (ValidityDataStore *store,
       const gchar *filename = common_file_map[i].filename;
       gboolean found = FALSE;
 
-      for (const gchar **base = validity_data_search_paths;
-           *base != NULL; base++)
+      for (gchar **base = paths; *base != NULL; base++)
         {
           g_autofree gchar *fpath =
             g_build_filename (*base, filename, NULL);
@@ -280,7 +347,7 @@ validity_data_load_common (ValidityDataStore *store,
 
       if (!found)
         {
-          g_autofree gchar *searched = format_search_paths (NULL);
+          g_autofree gchar *searched = format_search_paths (paths, NULL);
 
           g_set_error (error, FP_DEVICE_ERROR,
                        FP_DEVICE_ERROR_DATA_NOT_FOUND,

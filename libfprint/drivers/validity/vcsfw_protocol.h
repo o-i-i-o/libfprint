@@ -56,9 +56,15 @@
 #define VCSFW_CMD_GET_FACTORY_BITS 0x6F
 #define VCSFW_CMD_IDENTIFY_SENSOR 0x75
 
-/* ---- VCSFW Response Status Codes ---- */
+/* ---- VCSFW Response Status Codes ----
+ *
+ * Every reply starts with a 2-byte status, little-endian on the wire, and
+ * is decoded with vcsfw_parse_status(). The constants below are decoded
+ * values: GET_FW_INFO's "no firmware extension" reply is the wire bytes
+ * b0 04 (python-validity flash.py: rsp[0] == 0xb0 and rsp[1] == 4), which
+ * decode to 0x04B0. */
 #define VCSFW_STATUS_OK 0x0000
-#define VCSFW_STATUS_NO_FW 0xB004
+#define VCSFW_STATUS_NO_FW 0x04B0
 
 /* ---- Callback types ---- */
 
@@ -125,6 +131,12 @@ void vcsfw_tls_cmd_send (FpiDeviceValidity *self,
                          const guint8      *cmd,
                          gsize              cmd_len,
                          VcsfwCmdCallback   callback);
+
+/* Decode the 2-byte status at the start of a VCSFW reply (u16 LE, the same
+* for plain and decrypted TLS replies). Returns FALSE if @reply_len < 2. */
+gboolean vcsfw_parse_status (const guint8 *reply,
+                             gsize         reply_len,
+                             guint16      *status);
 
 gboolean vcsfw_parse_version (const guint8        *data,
                               gsize                data_len,

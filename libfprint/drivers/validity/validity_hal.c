@@ -28,7 +28,8 @@
 /* ================================================================
  * Flash partition layouts
  *
- * Standard layout: used by PID 0097, 009a, 009d
+ * Standard layout: used by PID 0097, 009a, 009d (and 00a2, as read back
+ *   from a provisioned sensor)
  *   Partition 4 (template DB) = 0x80000 bytes
  *
  * PID 0090 layout: smaller DB partition
@@ -118,6 +119,17 @@ static const ValidityDeviceDesc device_table[] = {
   [VALIDITY_HAL_DEV_D2] = {
     .vid = 0x06cb,
     .pid = 0x00d2,
+    .flash_layout = &flash_layout_standard,
+  },
+
+  /* GET_FLASH_INFO (3e) on a ThinkPad E480 sensor that the Windows driver
+   * had provisioned reported exactly the standard table: W25Q80B (1 MiB),
+   * partitions 1, 2, 5, 6, 4 with these ids, types, access levels, offsets
+   * and sizes. The layout is informational here: the driver never
+   * partitions a 00a2 (see validity_a2.c). */
+  [VALIDITY_HAL_DEV_A2] = {
+    .vid = 0x06cb,
+    .pid = 0x00a2,
     .flash_layout = &flash_layout_standard,
   },
 };

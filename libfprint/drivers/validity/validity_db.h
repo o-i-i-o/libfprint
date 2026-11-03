@@ -141,8 +141,11 @@ typedef struct
  * ================================================================ */
 typedef struct
 {
-  gboolean matched;      /* TRUE if user_dbid (tag 1) was found */
+  gboolean matched;      /* TRUE if user_dbid (tag 1) was found; 06cb:00a2
+                          * also needs tag 3 and a non-zero tag 2 */
   guint32  user_dbid;    /* tag 1: matched user record dbid */
+  guint32  tag2;         /* tag 2: non-zero on a match (06cb:00a2 parser
+                          * only; the vendor driver's no-match test) */
   guint16  subtype;      /* tag 3: matched finger subtype */
   guint8  *hash;         /* tag 4: match hash (owned, g_free) */
   gsize    hash_len;

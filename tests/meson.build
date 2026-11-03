@@ -326,6 +326,12 @@ endif
 if 'validity' in drivers
     unit_tests += [
         'validity',
+        # 06cb:00a2: the open/probe and verify/capture code paths of the
+        # driver, each compiled into the test with its USB layer replaced
+        # by a scripted sensor
+        'validity-a2-open',
+        'validity-a2-flow',
+        'validity-moh',
     ]
 endif
 
@@ -333,7 +339,12 @@ unit_tests_deps = { 'fpi-assembling' : [cairo_dep] }
 
 # Unit tests that call driver-internal functions directly need the driver
 # object files linked in (the default recipe only links core fprint-private).
-unit_tests_link = { 'validity' : [libfprint_drivers] }
+unit_tests_link = {
+    'validity' : [libfprint_drivers],
+    'validity-a2-open' : [libfprint_drivers],
+    'validity-a2-flow' : [libfprint_drivers],
+    'validity-moh' : [libfprint_drivers],
+}
 
 foreach test_name: unit_tests
     if unit_tests_deps.has_key(test_name)

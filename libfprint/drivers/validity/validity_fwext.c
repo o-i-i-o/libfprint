@@ -76,10 +76,9 @@ validity_fwext_parse_fw_info (const guint8   *data,
 {
   memset (info, 0, sizeof (*info));
 
-  /* Status 0xB004 (bytes: 0xb0 0x04) means no firmware loaded.
-   * python-validity checks: rsp[0]==0xb0 and rsp[1]==4
-   * Our vcsfw_cmd_send reads status as uint16 LE from the first 2 bytes,
-   * so wire bytes {0xb0, 0x04} -> status = 0x04B0 in LE. */
+  /* Wire bytes b0 04 mean no firmware loaded (python-validity checks
+   * rsp[0]==0xb0 and rsp[1]==4). The status is decoded u16 LE from the
+   * first 2 bytes (vcsfw_parse_status), so they arrive here as 0x04B0. */
   if (status == VCSFW_STATUS_NO_FW)
     {
       info->loaded = FALSE;
@@ -165,6 +164,11 @@ static const FwextFileEntry fwext_lenovo_mis_qm = {
   "Lenovo's fingerprint driver installer nz3gf09w.exe",
 };
 
+static const FwextFileEntry fwext_lenovo_sm_qm = {
+  "6_07f_lenovo_sm_qm.xpfwext",
+  "Lenovo's fingerprint driver installer r0yfp10w.exe (MUC 5.2.326.26)",
+};
+
 static const FwextFileEntry fwext_hp_cmit_mis_qm = {
   "6_07f_hp_cmit_mis_qm.xpfwext",
   "HP SoftPaq sp135736",
@@ -200,6 +204,10 @@ static const struct
   /* NOT verified: same 0x969 silicon as 00cb, but sp138431 does not list
    * 00d2 and no upload has been seen on it. */
   { 0x06cb, 0x00d2, &fwext_hp_mis_qm },
+  /* Name only: the file a ThinkPad E480 sensor reported as loaded (43 02:
+   * 6_07f_lenovo_sm_qm 1.3.6, build time 0x5e2ecf6e). The driver never
+   * uploads firmware to a 00a2 (validity_a2.c); the name is for messages. */
+  { 0x06cb, 0x00a2, &fwext_lenovo_sm_qm },
 };
 
 const gchar *

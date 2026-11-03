@@ -39,6 +39,8 @@
 #include "validity_pack.h"
 #include "fpi-print.h"
 #include "validity.h"
+#include "validity_a2.h"
+#include "validity_a2_capture.h"
 #include "vcsfw_protocol.h"
 
 /* Upper bound on frame retries (0x0526 rejections and captures the sensor
@@ -1571,6 +1573,24 @@ validity_enroll (FpDevice *device)
   FpiSsm *ssm;
 
   G_DEBUG_HERE ();
+
+  if (self->dev_type == VALIDITY_DEV_A2)
+    {
+      fpi_validity_a2_enroll (device);
+      return;
+    }
+
+  /* Models without an on-chip enrollment path fail before sending it.
+   * 00a2 has already dispatched to its host enrollment path above. */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_enroll)
+    {
+      fpi_device_enroll_complete (device, NULL,
+                                  fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                            "Enrollment is not "
+                                                            "supported on this "
+                                                            "sensor model yet"));
+      return;
+    }
 
   if (self->emulation_prints)
     {

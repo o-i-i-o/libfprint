@@ -22,6 +22,7 @@
 
 #include "fpi-device.h"
 #include "fpi-ssm.h"
+#include "validity_a2.h"
 #include "validity_capture.h"
 #include "validity_data.h"
 #include "validity_db.h"
@@ -64,6 +65,7 @@ typedef enum {
   VALIDITY_DEV_CB,      /* 06cb:00cb (HP Pavilion x360 14-dh) */
   VALIDITY_DEV_B7,      /* 06cb:00b7 (HP EliteBook 840 G6, 0xd51) -- hw-validated (@gfiguero) */
   VALIDITY_DEV_D2,      /* 06cb:00d2 (HP ENVY 13-aq / ProBook 450 G10, 0x969) -- hw-validated (@david.escob.rodr) */
+  VALIDITY_DEV_A2,      /* 06cb:00a2 (ThinkPad E480 "Metallica", 0x199) -- owned chips only, see validity_a2.c */
 } ValidityDeviceType;
 
 /* Firmware version info from GET_VERSION (cmd 0x01) */
@@ -294,6 +296,15 @@ struct _FpiDeviceValidity
 
   /* Firmware extension status */
   gboolean fwext_loaded;
+
+  /* Raw GET_VERSION (01) reply of the current open, status included, for
+   * the per-device safety gates (validity_a2.c) */
+  guint8 *rom_info_reply;
+  gsize   rom_info_reply_len;
+
+  /* Init blob on this device instance (policy init_once_per_instance).
+   * Survives close: an FpDevice lives for one USB enumeration. */
+  ValidityInitState init_state;
 
   /* Pairing state (for uninitialized devices) */
   ValidityPairState pair_state;

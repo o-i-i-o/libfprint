@@ -23,6 +23,8 @@
 #include "drivers_api.h"
 #include "validity_pack.h"
 #include "validity.h"
+#include "validity_a2.h"
+#include "validity_a2_capture.h"
 #include "validity_data.h"
 #include "validity_fwext.h"
 #include "validity_pair.h"
@@ -40,6 +42,8 @@ static const FpIdEntry id_table[] = {
   { .vid = 0x06CB, .pid = 0x00CB, .driver_data = VALIDITY_DEV_CB },
   { .vid = 0x06CB, .pid = 0x00B7, .driver_data = VALIDITY_DEV_B7 },
   { .vid = 0x06CB, .pid = 0x00D2, .driver_data = VALIDITY_DEV_D2 },
+  /* Owned sensors only: see the safety gates in validity_a2.c */
+  { .vid = 0x06CB, .pid = 0x00A2, .driver_data = VALIDITY_DEV_A2 },
   { .vid = 0,      .pid = 0,      .driver_data = 0 },
 };
 
@@ -119,6 +123,19 @@ dev_probe (FpDevice *device)
 
   self->dev_type = fpi_device_get_driver_data (device);
 
+  if (self->dev_type == VALIDITY_DEV_A2)
+    fpi_device_set_nr_enroll_stages (device, 6);
+
+  /* Image capture is a developer-build diagnostic for models whose policy
+  * allows it (06cb:00a2); every other device keeps the feature off. A
+  * model that refuses delete or clear_storage (06cb:00a2) does not
+  * advertise them, so that fprintd never asks (its enroll path deletes
+  * "garbage" prints and clears the storage before a first enrollment). */
+  fpi_device_update_features (device,
+                              fpi_validity_policy_features_to_clear (fpi_validity_device_policy (self->dev_type),
+                                                                     validity_dev_overrides_built ()),
+                              0);
+
   usb_dev = fpi_device_get_usb_device (device);
 
   if (!g_usb_device_open (usb_dev, &error))
@@ -128,10 +145,18 @@ dev_probe (FpDevice *device)
       return;
     }
 
-  if (!g_usb_device_reset (usb_dev, &error))
+  if (!fpi_validity_device_policy (self->dev_type)->allow_usb_reset)
+    {
+      fp_dbg ("Not resetting this sensor model at probe");
+    }
+  else if (!g_usb_device_reset (usb_dev, &error))
     {
       fp_dbg ("USB reset failed: %s", error->message);
       goto err_close;
+    }
+  else
+    {
+      fp_dbg ("USB reset at probe done");
     }
 
   if (!g_usb_device_claim_interface (usb_dev, 0, 0, &error))
@@ -266,6 +291,38 @@ typedef struct
   gboolean fwext_loaded;
 } OpenSsmData;
 
+/* Callback for the GET_VERSION (01) reply of the open: keep the raw reply
+ * and, for a device type with safety gates (06cb:00a2), refuse any chip
+ * state other than the supported one before sending anything else. */
+static void
+version_recv_cb (FpiUsbTransfer *transfer,
+                 FpDevice       *device,
+                 gpointer        user_data,
+                 GError         *error)
+{
+  FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
+
+  if (error)
+    {
+      fpi_ssm_mark_failed (transfer->ssm, error);
+      return;
+    }
+
+  g_clear_pointer (&self->rom_info_reply, g_free);
+  self->rom_info_reply_len = transfer->actual_length;
+  self->rom_info_reply = g_memdup2 (transfer->buffer, transfer->actual_length);
+
+  if (fpi_validity_device_policy (self->dev_type)->safety_gates &&
+      !fpi_validity_a2_rom_info_gate (self->rom_info_reply,
+                                      self->rom_info_reply_len, &error))
+    {
+      fpi_ssm_mark_failed (transfer->ssm, error);
+      return;
+    }
+
+  fpi_ssm_next_state (transfer->ssm);
+}
+
 /* Callback for GET_FW_INFO response — check if fwext is loaded */
 static void
 fw_info_recv_cb (FpiUsbTransfer *transfer,
@@ -281,12 +338,12 @@ fw_info_recv_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  /* GET_FW_INFO response: first 2 bytes are status.
-   * 0x0000 = fwext loaded, 0xb004 = no fwext, others = error */
+  /* GET_FW_INFO response: first 2 bytes are the status (u16 LE).
+   * 0x0000 = fwext loaded, 0x04b0 (wire b0 04) = no fwext, others = error */
   if (transfer->actual_length >= 2)
     {
       guint16 status = 0;
-      validity_unpack (transfer->buffer, transfer->actual_length, "h", &status);
+      vcsfw_parse_status (transfer->buffer, transfer->actual_length, &status);
       if (status == VCSFW_STATUS_OK)
         {
           self->fwext_loaded = TRUE;
@@ -304,6 +361,49 @@ fw_info_recv_cb (FpiUsbTransfer *transfer,
       fp_warn ("GET_FW_INFO response too short");
     }
 
+  /* Gated devices (06cb:00a2) must have the fwext loaded: the driver never
+   * uploads one to them, so stop before the init blob. */
+  if (fpi_validity_device_policy (self->dev_type)->safety_gates &&
+      !fpi_validity_a2_fwext_gate (transfer->buffer, transfer->actual_length,
+                                   &error))
+    {
+      fpi_ssm_mark_failed (transfer->ssm, error);
+      return;
+    }
+
+  fpi_ssm_next_state (transfer->ssm);
+}
+
+/* Callback for the 06<init> reply of a device type with safety gates
+ * (06cb:00a2): anything but status 0x0000 fails the open; the init is
+ * never retried, with the same or another blob. Other device types keep
+ * the generic callback, which does not look at the status. */
+static void
+init_recv_gated_cb (FpiUsbTransfer *transfer,
+                    FpDevice       *device,
+                    gpointer        user_data,
+                    GError         *error)
+{
+  FpiDeviceValidity *self = FPI_DEVICE_VALIDITY (device);
+
+  /* A lost reply leaves init_state at SENT: the next open on this
+   * instance refuses rather than send the blob again */
+  if (error)
+    {
+      fpi_ssm_mark_failed (transfer->ssm, error);
+      return;
+    }
+
+  if (!fpi_validity_a2_init_gate (transfer->buffer, transfer->actual_length,
+                                  &error))
+    {
+      self->init_state = VALIDITY_INIT_REJECTED;
+      fpi_ssm_mark_failed (transfer->ssm, error);
+      return;
+    }
+
+  self->init_state = VALIDITY_INIT_ACCEPTED;
+  fp_info ("Init blob accepted");
   fpi_ssm_next_state (transfer->ssm);
 }
 
@@ -505,7 +605,7 @@ open_recv_version (FpiSsm            *ssm,
   fpi_usb_transfer_fill_bulk (transfer, VALIDITY_EP_CMD_IN,
                               VALIDITY_MAX_TRANSFER_LEN);
   fpi_usb_transfer_submit (transfer, VALIDITY_USB_TIMEOUT, NULL,
-                           fpi_ssm_usb_transfer_cb, NULL);
+                           version_recv_cb, NULL);
 }
 
 static void
@@ -610,6 +710,11 @@ open_load_data (FpiSsm            *ssm,
       return;
     }
 
+  /* Blobs this model is never sent (06cb:00a2: reset, clean_slate,
+   * db_write_enable) are not kept, whatever the package holds */
+  fpi_validity_policy_drop_unused_data (fpi_validity_device_policy (self->dev_type),
+                                        &self->device_data);
+
   /* Load common data (partition sigs, CA cert, TLS keys, etc.) */
   if (!validity_data_load_common (&self->common_data, &error))
     {
@@ -641,6 +746,7 @@ open_send_init_hardcoded (FpiSsm            *ssm,
 {
   FpDevice *dev = FP_DEVICE (self);
   FpiUsbTransfer *transfer;
+  GError *error = NULL;
   gsize init_len;
   const guint8 *init_data;
 
@@ -652,8 +758,48 @@ open_send_init_hardcoded (FpiSsm            *ssm,
       return;
     }
 
+  switch (fpi_validity_init_action (fpi_validity_device_policy (self->dev_type),
+                                    self->init_state))
+    {
+    case VALIDITY_INIT_ACTION_SKIP:
+      /* Volatile RAM patch, still loaded: this device instance has not
+       * been re-enumerated since the sensor accepted it */
+      fp_info ("Init blob already accepted on this device instance — "
+               "not sending it again");
+      fpi_ssm_jump_to_state (ssm, OPEN_SEND_INIT_CLEAN_SLATE);
+      return;
+
+    case VALIDITY_INIT_ACTION_REFUSE:
+      fpi_ssm_mark_failed (ssm,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_GENERAL,
+                                                     "The init blob was sent to "
+                                                     "this sensor before and not "
+                                                     "accepted (%s); it is not "
+                                                     "sent again until the "
+                                                     "sensor is enumerated anew "
+                                                     "(restart fprintd or reboot)",
+                                                     self->init_state == VALIDITY_INIT_REJECTED ?
+                                                     "rejected" : "no reply"));
+      return;
+
+    case VALIDITY_INIT_ACTION_SEND:
+    default:
+      break;
+    }
+
   init_data = validity_data_get_bytes (&self->device_data,
                                        VALIDITY_DATA_INIT, &init_len);
+
+  if ((!init_data || init_len == 0) &&
+      fpi_validity_device_policy (self->dev_type)->safety_gates)
+    {
+      fpi_ssm_mark_failed (ssm,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_NOT_FOUND,
+                                                     "No init blob loaded for "
+                                                     "this sensor; not "
+                                                     "continuing without it"));
+      return;
+    }
 
   if (!init_data || init_len == 0)
     {
@@ -662,7 +808,18 @@ open_send_init_hardcoded (FpiSsm            *ssm,
       return;
     }
 
+  /* 06cb:00a2: only the one reviewed blob, whatever the package holds;
+   * refused before anything is sent (init_state stays NOT_SENT) */
+  if (fpi_validity_device_policy (self->dev_type)->safety_gates &&
+      !fpi_validity_a2_init_blob_ok (init_data, init_len, &error))
+    {
+      fpi_ssm_mark_failed (ssm, error);
+      return;
+    }
+
   fp_dbg ("Sending init_hardcoded (%zu bytes)", init_len);
+  if (fpi_validity_device_policy (self->dev_type)->init_once_per_instance)
+    self->init_state = VALIDITY_INIT_SENT;
   transfer = fpi_usb_transfer_new (dev);
   transfer->short_is_error = TRUE;
   transfer->ssm = ssm;
@@ -678,13 +835,15 @@ open_recv_init_hardcoded (FpiSsm            *ssm,
 {
   FpDevice *dev = FP_DEVICE (self);
   FpiUsbTransfer *transfer;
+  gboolean gated = fpi_validity_device_policy (self->dev_type)->safety_gates;
 
   transfer = fpi_usb_transfer_new (dev);
   transfer->ssm = ssm;
   fpi_usb_transfer_fill_bulk (transfer, VALIDITY_EP_CMD_IN,
                               VALIDITY_MAX_TRANSFER_LEN);
   fpi_usb_transfer_submit (transfer, VALIDITY_USB_TIMEOUT, NULL,
-                           fpi_ssm_usb_transfer_cb, NULL);
+                           gated ? init_recv_gated_cb : fpi_ssm_usb_transfer_cb,
+                           NULL);
 }
 
 static void
@@ -696,8 +855,10 @@ open_send_init_clean_slate (FpiSsm            *ssm,
   gsize cs_len;
   const guint8 *cs_data;
 
-  /* clean_slate is only sent when fwext is NOT loaded */
-  if (self->fwext_loaded)
+  /* clean_slate is only sent when fwext is NOT loaded, and never to a
+   * device type whose policy forbids it (06cb:00a2) */
+  if (self->fwext_loaded ||
+      !fpi_validity_device_policy (self->dev_type)->allow_clean_slate)
     {
       fpi_ssm_next_state (ssm);
       return;
@@ -731,8 +892,9 @@ open_recv_init_clean_slate (FpiSsm            *ssm,
   FpDevice *dev = FP_DEVICE (self);
   FpiUsbTransfer *transfer;
 
-  /* If fwext loaded, we skipped the send — just advance */
-  if (self->fwext_loaded)
+  /* If the send was skipped, just advance */
+  if (self->fwext_loaded ||
+      !fpi_validity_device_policy (self->dev_type)->allow_clean_slate)
     {
       fpi_ssm_next_state (ssm);
       return;
@@ -757,6 +919,19 @@ open_upload_fwext (FpiSsm            *ssm,
   if (self->fwext_loaded)
     {
       fpi_ssm_next_state (ssm);
+      return;
+    }
+
+  /* Never upload firmware to a device type whose policy forbids it
+   * (06cb:00a2; its GET_FW_INFO gate already stops an open without fwext) */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_fwext_upload)
+    {
+      fpi_ssm_mark_failed (ssm,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                     "The sensor has no firmware "
+                                                     "extension loaded, and this "
+                                                     "driver never uploads one to "
+                                                     "it"));
       return;
     }
 
@@ -839,13 +1014,20 @@ static void
 open_tls_derive_psk (FpiSsm            *ssm,
                      FpiDeviceValidity *self)
 {
-  /* Derive PSK from hardware identity (DMI) */
-  validity_tls_derive_psk (&self->tls);
+  GError *error = NULL;
+
+  /* Derive PSK from hardware identity (DMI). Only a developer build with
+   * FP_VALIDITY_DMI_SERIAL_FILE set can fail here (fail closed). */
+  if (!validity_tls_derive_psk_checked (&self->tls, &error))
+    {
+      g_prefix_error (&error, "Developer DMI serial override: ");
+      fpi_ssm_mark_failed (ssm, error);
+      return;
+    }
 
   /* Flash response format (after 2-byte status already stripped):
    *   [size:4 LE][unknown:2][flash_data:size]
    * See python-validity: sz, = unpack('<xxLxx', rsp[:8]) */
-  GError *error = NULL;
   if (self->cmd_response_data && self->cmd_response_len > 6)
     {
       guint32 flash_sz = 0;
@@ -1121,10 +1303,36 @@ open_capture_setup (FpiSsm            *ssm,
   fpi_ssm_next_state (ssm);
 }
 
+/* For a device type with safety gates (06cb:00a2): is the identified
+ * sensor the one the capture code was written for, with its calibration
+ * (@need_calibration)? See fpi_validity_a2_sensor_gate(). */
+static gboolean
+open_sensor_gate (FpiDeviceValidity *self,
+                  gboolean           need_calibration,
+                  GError           **error)
+{
+  if (!fpi_validity_device_policy (self->dev_type)->safety_gates)
+    return TRUE;
+
+  return fpi_validity_a2_sensor_gate (self->sensor.device_info ?
+                                      self->sensor.device_info->type : 0,
+                                      self->sensor.real_sensor_type,
+                                      &self->capture, need_calibration, error);
+}
+
 static void
 open_calibrate_build (FpiSsm            *ssm,
                       FpiDeviceValidity *self)
 {
+  GError *error = NULL;
+
+  /* 06cb:00a2: no calibration capture program for any other sensor */
+  if (!open_sensor_gate (self, FALSE, &error))
+    {
+      fpi_ssm_mark_failed (ssm, error);
+      return;
+    }
+
   /* Run calibration captures to establish sensor finger-detect baseline.
    * PY: sensor.calibrate() — 3 iterations of CALIBRATE capture.
    * Without this, chunk 0x26 (Finger Detect) always triggers. */
@@ -1311,6 +1519,19 @@ open_done (FpiSsm            *ssm,
                                                      "No TLS session with the "
                                                      "sensor was established"));
       return;
+    }
+
+  /* 06cb:00a2: the steps above skip identification, capture setup or
+   * calibration when they fail; without them the sensor cannot capture */
+  if (self->tls.secure_rx)
+    {
+      GError *error = NULL;
+
+      if (!open_sensor_gate (self, TRUE, &error))
+        {
+          fpi_ssm_mark_failed (ssm, error);
+          return;
+        }
     }
 
   /* All init commands sent. Mark open complete. */
@@ -1521,11 +1742,24 @@ validity_reconnect_start (FpiDeviceValidity  *self,
                           ValidityReconnectCb cb,
                           gpointer            user_data)
 {
-  FpDevice *dev = FP_DEVICE (self);
-  GUsbDevice *usb = fpi_device_get_usb_device (dev);
+  FpDevice *dev;
+  GUsbDevice *usb;
 
   g_autoptr(GError) error = NULL;
   FpiSsm *ssm;
+
+  /* Never USB-reset and re-open a sensor model whose policy forbids it
+  * (06cb:00a2); validity_recover_or_fail() does not get here for it */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_reconnect)
+    {
+      fp_info ("In-driver reconnect is disabled for this sensor model");
+      if (cb)
+        cb (self, FALSE, user_data);
+      return;
+    }
+
+  dev = FP_DEVICE (self);
+  usb = fpi_device_get_usb_device (dev);
 
   self->in_recovery = TRUE;
   self->reconnect_cb = cb;
@@ -1574,6 +1808,9 @@ validity_recover_or_fail (FpiDeviceValidity  *self,
   ValidityErrClass klass;
   gboolean alive;
 
+  /* 06cb:00a2: report the error; no USB reset, no automatic re-open */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_reconnect)
+    return FALSE;
   if (self->in_recovery)                 /* already recovering -- don't stack */
     return FALSE;
   if (self->reconnect_attempts >= VALIDITY_MAX_RECONNECTS)
@@ -1619,6 +1856,24 @@ dev_open (FpDevice *device)
   if (g_strcmp0 (g_getenv ("FP_DEVICE_EMULATION"), "1") == 0)
     self->emulation_prints = g_ptr_array_new_with_free_func (g_object_unref);
 
+  /* 06cb:00a2: clear a TLS session a previous open left in the sensor's
+   * RAM (it answers a plain 01 with 0x0315 otherwise); see
+   * validity_a2.c. The reset may drop the init RAM patch, so an accepted
+   * init is sent again; a rejected or unanswered one still refuses. */
+  if (fpi_validity_device_policy (self->dev_type)->reset_at_open)
+    {
+      if (!g_usb_device_reset (fpi_device_get_usb_device (device), &error))
+        {
+          fp_dbg ("USB reset at open failed: %s", error->message);
+          validity_release_state (self);
+          fpi_device_open_complete (device, validity_map_removed_error (error));
+          return;
+        }
+      fp_dbg ("USB reset at open done");
+      if (self->init_state == VALIDITY_INIT_ACCEPTED)
+        self->init_state = VALIDITY_INIT_NOT_SENT;
+    }
+
   if (!g_usb_device_claim_interface (fpi_device_get_usb_device (device), 0, 0, &error))
     {
       validity_release_state (self);
@@ -1644,6 +1899,8 @@ validity_release_state (FpiDeviceValidity *self)
 {
   g_clear_pointer (&self->cmd_response_data, g_free);
   self->cmd_response_len = 0;
+  g_clear_pointer (&self->rom_info_reply, g_free);
+  self->rom_info_reply_len = 0;
 
   g_clear_pointer (&self->enroll_template, g_free);
   self->enroll_template_len = 0;
@@ -1709,6 +1966,11 @@ fpi_device_validity_class_init (FpiDeviceValidityClass *klass)
   dev_class->delete = validity_delete;
   dev_class->list = validity_list;
   dev_class->clear_storage = validity_clear_storage;
+  /* Diagnostics in developer builds only (see fpi_validity_a2_capture());
+   * probe keeps the feature off for every model whose policy does not
+   * allow it */
+  if (validity_dev_overrides_built ())
+    dev_class->capture = fpi_validity_a2_capture;
 
   fpi_device_class_auto_initialize_features (dev_class);
 }

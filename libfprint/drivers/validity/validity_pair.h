@@ -57,6 +57,8 @@ typedef enum {
   VALIDITY_PAIR_REFUSE_UNREADABLE,  /* could not read partition 1 */
   VALIDITY_PAIR_REFUSE_PARTIAL,     /* key data we cannot use */
   VALIDITY_PAIR_REFUSE_RECOVERY,    /* would provision, but in a reconnect */
+  VALIDITY_PAIR_REFUSE_POLICY,      /* 0 partitions, but the device type is
+                                     * never provisioned (06cb:00a2) */
 } ValidityPairDecision;
 
 /* Pairing state kept across SSM states */
@@ -259,6 +261,25 @@ ValidityTlsFlashClass validity_pair_classify_tls_flash (guint16       status,
 ValidityPairDecision validity_pair_decide (guint16               num_partitions,
                                            ValidityTlsFlashClass flash,
                                            gboolean              check_only);
+
+/**
+ * validity_pair_decide_for_policy:
+ * @num_partitions: partition count from GET_FLASH_INFO
+ * @flash: partition-1 class (see validity_pair_decide())
+ * @check_only: %TRUE when pairing must not start (in-driver reconnect)
+ * @allow_provisioning: %FALSE for a device type that is never provisioned
+ *   (#ValidityDevicePolicy, 06cb:00a2)
+ *
+ * validity_pair_decide(), except that a sensor with no partitions is
+ * refused with %VALIDITY_PAIR_REFUSE_POLICY when @allow_provisioning is
+ * %FALSE, so %VALIDITY_PAIR_PROVISION can never be returned for it.
+ *
+ * Returns: the #ValidityPairDecision.
+ */
+ValidityPairDecision validity_pair_decide_for_policy (guint16               num_partitions,
+                                                      ValidityTlsFlashClass flash,
+                                                      gboolean              check_only,
+                                                      gboolean              allow_provisioning);
 
 /**
  * validity_pair_state_init:

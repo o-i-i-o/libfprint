@@ -12,6 +12,7 @@
 #include <glib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <glib/gstdio.h>
 
 #include <openssl/evp.h>
@@ -38,8 +39,49 @@
 #include "drivers/validity/validity_capture.h"
 #include "drivers/validity/validity_tls.h"
 #include "drivers/validity/validity_pair.h"
+#include "drivers/validity/validity_a2.h"
+#include "drivers/validity/validity_a2_capture.h"
+#include "drivers/validity/validity_data.h"
 
 #include "test-device-fake.h"
+
+/* ================================================================
+ * Real 06cb:00a2 replies (wire bytes, status included)
+ *
+ * Captured read-only from a ThinkPad E480 sensor (ROM 6.7 build 164,
+ * fwext 6_07f_lenovo_sm_qm 1.3.6, owned and paired by the Windows
+ * driver) on 2026-10-12 by a pre-TLS probe (commands 01, 43 02, 3e). None
+ * of them carries key material; 01 bytes 18..23 are the chip serial that
+ * the USB descriptor also exposes. Byte indexes r[n] below count from the
+ * first status byte, as in the RE notes.
+ * ================================================================ */
+static const guint8 a2_rom_info_reply[] = {
+  0x00, 0x00, 0xf0, 0xb0, 0x5e, 0x54, 0xa4, 0x00, 0x00, 0x00, 0x06, 0x07,
+  0x01, 0x30, 0x00, 0x01, 0x00, 0x00, 0xbc, 0xbb, 0x8b, 0x68, 0x49, 0x61,
+  0x00, 0x23, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0xd1,
+  0x00, 0x07,
+};
+
+static const guint8 a2_fwext_info_reply[] = {
+  0x00, 0x00, 0x01, 0x00, 0x03, 0x00, 0x07, 0x00, 0x6e, 0xcf, 0x2e, 0x5e,
+  0x01, 0x00, 0x34, 0x46, 0x02, 0x00, 0x07, 0x00, 0xc0, 0x3f, 0x00, 0x00,
+  0x01, 0x00, 0x84, 0x08, 0x01, 0x00, 0x07, 0x00, 0x30, 0x05, 0x00, 0x00,
+  0x02, 0x00, 0x84, 0x28, 0x03, 0x00, 0x12, 0x00, 0x40, 0x10, 0x00, 0x00,
+  0x01, 0x00, 0x86, 0x47, 0x00, 0x00, 0x01, 0x00, 0x50, 0x5a, 0x00, 0x00,
+  0x02, 0x00, 0x23, 0x77, 0x00, 0x00, 0x01, 0x00, 0xc0, 0x2f, 0x00, 0x00,
+  0x02, 0x00, 0x00, 0x37, 0x00, 0x00, 0x01, 0x00, 0x30, 0x07, 0x02, 0x00,
+  0x01, 0x00, 0x25, 0x56, 0x00, 0x00, 0x01, 0x00, 0x60, 0x04, 0x00, 0x00,
+};
+
+static const guint8 a2_flash_info_reply[] = {
+  0x00, 0x00, 0xef, 0x00, 0x40, 0x00, 0x00, 0x10, 0x01, 0x00, 0x00, 0x01,
+  0x01, 0x00, 0x05, 0x00, 0x01, 0x04, 0x07, 0x00, 0x00, 0x10, 0x00, 0x00,
+  0x00, 0x10, 0x00, 0x00, 0x02, 0x01, 0x02, 0x00, 0x00, 0x20, 0x00, 0x00,
+  0x00, 0xe0, 0x03, 0x00, 0x05, 0x05, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00,
+  0x00, 0x80, 0x00, 0x00, 0x06, 0x06, 0x03, 0x00, 0x00, 0x80, 0x04, 0x00,
+  0x00, 0x80, 0x00, 0x00, 0x04, 0x03, 0x05, 0x00, 0x00, 0x00, 0x05, 0x00,
+  0x00, 0x00, 0x08, 0x00,
+};
 
 /* ================================================================
  * Tests: HAL
@@ -233,6 +275,681 @@ test_hal_lookup_consistency (void)
     validity_hal_device_lookup_by_pid (0x06cb, 0x009a);
 
   g_assert_true (by_type == by_pid);
+}
+
+/* ================================================================
+ * T7.11: 06cb:00a2 descriptor and the flash layout the sensor reported
+ *
+ * The HAL entry for 00a2 uses the standard layout because a provisioned
+ * E480 sensor reported exactly that table in GET_FLASH_INFO (3e). Compare
+ * every partition entry of the real reply with the HAL table.
+ * ================================================================ */
+static void
+test_hal_a2_matches_real_flash_info (void)
+{
+  const ValidityDeviceDesc *desc = validity_hal_device_lookup (VALIDITY_DEV_A2);
+  const guint8 *data = a2_flash_info_reply + 2;
+  gsize data_len = sizeof (a2_flash_info_reply) - 2;
+  ValidityFlashIcParams ic = { 0 };
+  guint16 pcnt = 0;
+  guint16 status = 0xffff;
+
+  /* The HAL enum indexes the same table as the driver enum */
+  g_assert_cmpint (VALIDITY_HAL_DEV_A2, ==, VALIDITY_DEV_A2);
+  g_assert_cmpint (VALIDITY_HAL_DEV_D2, ==, VALIDITY_DEV_D2);
+
+  g_assert_nonnull (desc);
+  g_assert_cmphex (desc->vid, ==, 0x06cb);
+  g_assert_cmphex (desc->pid, ==, 0x00a2);
+  g_assert_true (desc == validity_hal_device_lookup_by_pid (0x06cb, 0x00a2));
+  g_assert_nonnull (desc->flash_layout);
+
+  g_assert_true (vcsfw_parse_status (a2_flash_info_reply,
+                                     sizeof (a2_flash_info_reply), &status));
+  g_assert_cmphex (status, ==, VCSFW_STATUS_OK);
+  g_assert_true (validity_pair_parse_flash_info (data, data_len, &ic, &pcnt));
+  g_assert_cmpuint (ic.size, ==, 0x100000);       /* W25Q80B, 1 MiB */
+  g_assert_cmpuint (pcnt, ==, 5);
+  g_assert_cmpuint (pcnt, ==, desc->flash_layout->num_partitions);
+
+  /* 14-byte header, then 12 bytes per partition: id, type, access (u16),
+   * offset (u32), size (u32) */
+  g_assert_cmpuint (data_len, ==, 14 + pcnt * 12);
+  for (guint i = 0; i < pcnt; i++)
+    {
+      const guint8 *e = data + 14 + i * 12;
+      const ValidityPartition *p = &desc->flash_layout->partitions[i];
+
+      g_assert_cmpuint (e[0], ==, p->id);
+      g_assert_cmpuint (e[1], ==, p->type);
+      g_assert_cmpuint (FP_READ_UINT16_LE (e + 2), ==, p->access_lvl);
+      g_assert_cmphex (FP_READ_UINT32_LE (e + 4), ==, p->offset);
+      g_assert_cmphex (FP_READ_UINT32_LE (e + 8), ==, p->size);
+    }
+}
+
+/* ================================================================
+ * Tests: 06cb:00a2 policy and safety gates
+ * ================================================================ */
+
+/* The types that existed before 00a2 keep the driver's behaviour; 00a2
+ * and any unknown type get the restricted policy. */
+static void
+test_a2_device_policy (void)
+{
+  const guint permissive[] = { VALIDITY_DEV_90, VALIDITY_DEV_97,
+                               VALIDITY_DEV_9A, VALIDITY_DEV_9D,
+                               VALIDITY_DEV_AB, VALIDITY_DEV_CB,
+                               VALIDITY_DEV_B7, VALIDITY_DEV_D2 };
+  const guint restricted[] = { VALIDITY_DEV_A2, 99, G_MAXUINT };
+
+  for (gsize i = 0; i < G_N_ELEMENTS (permissive); i++)
+    {
+      const ValidityDevicePolicy *p = fpi_validity_device_policy (permissive[i]);
+
+      g_assert_nonnull (p);
+      g_assert_false (p->safety_gates);
+      g_assert_true (p->allow_provisioning);
+      g_assert_true (p->allow_fwext_upload);
+      g_assert_true (p->allow_clean_slate);
+      g_assert_true (p->allow_enroll);
+      g_assert_true (p->allow_clear_storage);
+      g_assert_true (p->allow_delete);
+      g_assert_true (p->allow_reclaim_erase);
+      g_assert_true (p->allow_usb_reset);
+      g_assert_true (p->allow_reconnect);
+      g_assert_false (p->reset_at_open);
+      g_assert_false (p->init_once_per_instance);
+      g_assert_false (p->stream_capture_flow);
+      g_assert_false (p->allow_image_capture);
+    }
+
+  for (gsize i = 0; i < G_N_ELEMENTS (restricted); i++)
+    {
+      const ValidityDevicePolicy *p = fpi_validity_device_policy (restricted[i]);
+
+      g_assert_nonnull (p);
+      g_assert_true (p->safety_gates);
+      g_assert_false (p->allow_provisioning);
+      g_assert_false (p->allow_fwext_upload);
+      g_assert_false (p->allow_clean_slate);
+      g_assert_false (p->allow_enroll);
+      g_assert_cmpint (p->allow_host_enroll, ==, restricted[i] == VALIDITY_DEV_A2);
+      g_assert_false (p->allow_clear_storage);
+      g_assert_false (p->allow_delete);
+      g_assert_false (p->allow_reclaim_erase);
+      g_assert_true (p->allow_usb_reset);
+      g_assert_false (p->allow_reconnect);
+      g_assert_true (p->reset_at_open);
+      g_assert_true (p->init_once_per_instance);
+      g_assert_true (p->stream_capture_flow);
+      g_assert_false (p->strict_image_flags);
+    }
+}
+
+/* What probe clears: 00a2 never advertises storage delete or clear (the
+ * driver refuses them; fprintd would otherwise call them from its enroll
+ * path) and advertises capture only in a developer build; the other
+ * models keep delete and clear and never advertise capture. */
+static void
+test_a2_probe_features (void)
+{
+  const ValidityDevicePolicy *a2 = fpi_validity_device_policy (VALIDITY_DEV_A2);
+  const ValidityDevicePolicy *d9a = fpi_validity_device_policy (VALIDITY_DEV_9A);
+  const FpDeviceFeature storage_rw = FP_DEVICE_FEATURE_STORAGE_DELETE |
+                                     FP_DEVICE_FEATURE_STORAGE_CLEAR;
+
+  g_assert_cmphex (fpi_validity_policy_features_to_clear (a2, FALSE), ==,
+                   storage_rw | FP_DEVICE_FEATURE_CAPTURE);
+  g_assert_cmphex (fpi_validity_policy_features_to_clear (a2, TRUE), ==,
+                   storage_rw);
+  g_assert_cmphex (fpi_validity_policy_features_to_clear (d9a, FALSE), ==,
+                   FP_DEVICE_FEATURE_CAPTURE);
+  g_assert_cmphex (fpi_validity_policy_features_to_clear (d9a, TRUE), ==,
+                   FP_DEVICE_FEATURE_CAPTURE);
+  /* never identify, verify, storage or listing */
+  for (gint dev = 0; dev <= 1; dev++)
+    g_assert_cmphex (fpi_validity_policy_features_to_clear (dev ? a2 : d9a, dev) &
+                     (FP_DEVICE_FEATURE_IDENTIFY | FP_DEVICE_FEATURE_VERIFY |
+                      FP_DEVICE_FEATURE_STORAGE |
+                      FP_DEVICE_FEATURE_STORAGE_LIST), ==, 0);
+}
+
+/* Init once per device instance (00a2): sent on the first open, skipped
+ * while accepted, and never re-sent after a rejection or a lost reply.
+ * Other types send it on every open, as before. */
+static void
+test_a2_init_action (void)
+{
+  const ValidityDevicePolicy *a2 = fpi_validity_device_policy (VALIDITY_DEV_A2);
+  const ValidityDevicePolicy *d9a = fpi_validity_device_policy (VALIDITY_DEV_9A);
+  const ValidityInitState states[] = {
+    VALIDITY_INIT_NOT_SENT, VALIDITY_INIT_SENT,
+    VALIDITY_INIT_ACCEPTED, VALIDITY_INIT_REJECTED,
+  };
+
+  g_assert_cmpint (fpi_validity_init_action (a2, VALIDITY_INIT_NOT_SENT), ==,
+                   VALIDITY_INIT_ACTION_SEND);
+  g_assert_cmpint (fpi_validity_init_action (a2, VALIDITY_INIT_ACCEPTED), ==,
+                   VALIDITY_INIT_ACTION_SKIP);
+  g_assert_cmpint (fpi_validity_init_action (a2, VALIDITY_INIT_SENT), ==,
+                   VALIDITY_INIT_ACTION_REFUSE);
+  g_assert_cmpint (fpi_validity_init_action (a2, VALIDITY_INIT_REJECTED), ==,
+                   VALIDITY_INIT_ACTION_REFUSE);
+  g_assert_cmpint (fpi_validity_init_action (a2, (ValidityInitState) 42), ==,
+                   VALIDITY_INIT_ACTION_REFUSE);
+
+  for (gsize i = 0; i < G_N_ELEMENTS (states); i++)
+    {
+      g_assert_cmpint (fpi_validity_init_action (d9a, states[i]), ==,
+                       VALIDITY_INIT_ACTION_SEND);
+      g_assert_cmpint (fpi_validity_init_action (NULL, states[i]), ==,
+                       VALIDITY_INIT_ACTION_SEND);
+    }
+
+  /* A fresh instance starts at NOT_SENT (GObject zero-fills it) */
+  g_assert_cmpint (VALIDITY_INIT_NOT_SENT, ==, 0);
+}
+
+static void
+a2_reconnect_cb (FpiDeviceValidity *self,
+                 gboolean           success,
+                 gpointer           user_data)
+{
+  gint *calls = user_data;
+
+  g_assert_false (success);
+  (*calls)++;
+}
+
+/* No in-driver reconnect (USB reset + re-open) for 00a2, whatever the
+ * error; the checks run before the device object is touched. */
+static void
+test_a2_no_reconnect (void)
+{
+  FpiDeviceValidity dev = { 0 };
+  const GError *errors[] = { NULL, NULL };
+
+  g_autoptr(GError) io = g_error_new_literal (G_USB_DEVICE_ERROR,
+                                              G_USB_DEVICE_ERROR_IO, "io");
+  g_autoptr(GError) gone = g_error_new_literal (G_USB_DEVICE_ERROR,
+                                                G_USB_DEVICE_ERROR_NO_DEVICE,
+                                                "gone");
+  gint calls = 0;
+
+  errors[0] = io;
+  errors[1] = gone;
+  dev.dev_type = VALIDITY_DEV_A2;
+  dev.tls.session_broken = TRUE;     /* a TLS alert */
+
+  for (gsize i = 0; i < G_N_ELEMENTS (errors); i++)
+    g_assert_false (validity_recover_or_fail (&dev, errors[i],
+                                              a2_reconnect_cb, &calls));
+  g_assert_cmpint (calls, ==, 0);
+  g_assert_cmpuint (dev.reconnect_attempts, ==, 0);
+  g_assert_false (dev.in_recovery);
+
+  validity_reconnect_start (&dev, a2_reconnect_cb, &calls);
+  g_assert_cmpint (calls, ==, 1);
+  g_assert_cmpuint (dev.reconnect_attempts, ==, 0);
+  g_assert_false (dev.in_recovery);
+}
+
+/* The real 01 reply of the owned, patched E480 sensor passes */
+static void
+test_a2_rom_gate_real (void)
+{
+  g_autoptr(GError) error = NULL;
+
+  g_assert_cmpuint (sizeof (a2_rom_info_reply), ==,
+                    VALIDITY_A2_ROM_INFO_REPLY_LEN);
+  g_assert_cmpint (fpi_validity_a2_check_rom_info (a2_rom_info_reply,
+                                                   sizeof (a2_rom_info_reply)),
+                   ==, VALIDITY_A2_ROM_OK);
+  g_assert_true (fpi_validity_a2_rom_info_gate (a2_rom_info_reply,
+                                                sizeof (a2_rom_info_reply),
+                                                &error));
+  g_assert_no_error (error);
+
+  /* Only the low nibble of r[37] is the provisioning state */
+  {
+    guint8 r[VALIDITY_A2_ROM_INFO_REPLY_LEN];
+
+    memcpy (r, a2_rom_info_reply, sizeof (r));
+    r[37] = 0x17;
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (r, sizeof (r)), ==,
+                     VALIDITY_A2_ROM_OK);
+  }
+
+  /* r[17] and r[25] as the sensor reports them; only bits 0x02 and 0x20
+   * of r[25] are required */
+  {
+    guint8 r[VALIDITY_A2_ROM_INFO_REPLY_LEN];
+
+    g_assert_cmphex (a2_rom_info_reply[17], ==, 0x00);
+    g_assert_cmphex (a2_rom_info_reply[25], ==, 0x23);
+    memcpy (r, a2_rom_info_reply, sizeof (r));
+    r[25] = 0x22;
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (r, sizeof (r)), ==,
+                     VALIDITY_A2_ROM_OK);
+    r[25] = 0xff;
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (r, sizeof (r)), ==,
+                     VALIDITY_A2_ROM_OK);
+  }
+}
+
+/* Each mutation of the real 01 reply is refused, with NOT_SUPPORTED and
+ * a message that names the reason */
+static void
+test_a2_rom_gate_negative (void)
+{
+  static const struct
+  {
+    guint              index;
+    guint8             value;
+    ValidityA2RomCheck expect;
+    const gchar       *message;
+  } cases[] = {
+    /* blank chip (never provisioned) */
+    { 37, 0x02, VALIDITY_A2_ROM_NOT_OWNED, "provisioning state is 2" },
+    /* partially provisioned, owned-but-6, broken */
+    { 37, 0x05, VALIDITY_A2_ROM_NOT_OWNED, "provisioning state is 5" },
+    { 37, 0x06, VALIDITY_A2_ROM_NOT_OWNED, "provisioning state is 6" },
+    { 37, 0x0f, VALIDITY_A2_ROM_NOT_OWNED, "provisioning state is 15" },
+    /* security update not applied (old generation / blank) */
+    { 34, 0x02, VALIDITY_A2_ROM_NOT_PATCHED, "security state is 02 d1" },
+    { 35, 0x00, VALIDITY_A2_ROM_NOT_PATCHED, "security state is 03 00" },
+    /* other products and ROMs */
+    { 13, 0x31, VALIDITY_A2_ROM_WRONG_PRODUCT, "product 0x31" },
+    { 13, 0x00, VALIDITY_A2_ROM_WRONG_PRODUCT, "product 0x00" },
+    { 10, 0x05, VALIDITY_A2_ROM_WRONG_VERSION, "ROM 5.7" },
+    { 11, 0x08, VALIDITY_A2_ROM_WRONG_VERSION, "ROM 6.8" },
+    { 12, 0x00, VALIDITY_A2_ROM_NOT_TARGET_1, "byte 12 is 0x00" },
+    { 12, 0x02, VALIDITY_A2_ROM_NOT_TARGET_1, "byte 12 is 0x02" },
+    /* error status (busy) */
+    { 0, 0x01, VALIDITY_A2_ROM_BAD_STATUS, "status 0x0001" },
+    { 1, 0x04, VALIDITY_A2_ROM_BAD_STATUS, "status 0x0400" },
+    /* a loaded RAM patch reported (the vendor driver would send 1a) */
+    { 17, 0x01, VALIDITY_A2_ROM_PATCH_PENDING, "byte 17 is 0x01" },
+    { 17, 0xff, VALIDITY_A2_ROM_PATCH_PENDING, "byte 17 is 0xff" },
+    /* without secure mode or the production key */
+    { 25, 0x21, VALIDITY_A2_ROM_NOT_SECURE, "byte 25 is 0x21" },
+    { 25, 0x03, VALIDITY_A2_ROM_NOT_SECURE, "byte 25 is 0x03" },
+    { 25, 0x00, VALIDITY_A2_ROM_NOT_SECURE, "byte 25 is 0x00" },
+  };
+
+  for (gsize i = 0; i < G_N_ELEMENTS (cases); i++)
+    {
+      g_autoptr(GError) error = NULL;
+      guint8 r[VALIDITY_A2_ROM_INFO_REPLY_LEN];
+
+      memcpy (r, a2_rom_info_reply, sizeof (r));
+      r[cases[i].index] = cases[i].value;
+
+      g_assert_cmpint (fpi_validity_a2_check_rom_info (r, sizeof (r)), ==,
+                       cases[i].expect);
+      g_assert_false (fpi_validity_a2_rom_info_gate (r, sizeof (r), &error));
+      g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+      g_assert_nonnull (strstr (error->message, cases[i].message));
+    }
+
+  /* A blank chip that also lacks the update reports the owner state first */
+  {
+    guint8 r[VALIDITY_A2_ROM_INFO_REPLY_LEN];
+
+    memcpy (r, a2_rom_info_reply, sizeof (r));
+    r[37] = 0x02;
+    r[34] = 0x00;
+    r[35] = 0x00;
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (r, sizeof (r)), ==,
+                     VALIDITY_A2_ROM_NOT_OWNED);
+  }
+
+  /* Any other length is refused, including a longer reply */
+  {
+    g_autoptr(GError) error = NULL;
+    guint8 longer[VALIDITY_A2_ROM_INFO_REPLY_LEN + 2] = { 0 };
+
+    memcpy (longer, a2_rom_info_reply, sizeof (a2_rom_info_reply));
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (longer, sizeof (longer)), ==,
+                     VALIDITY_A2_ROM_BAD_LENGTH);
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (a2_rom_info_reply,
+                                                     sizeof (a2_rom_info_reply) - 1),
+                     ==, VALIDITY_A2_ROM_BAD_LENGTH);
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (a2_rom_info_reply, 0), ==,
+                     VALIDITY_A2_ROM_BAD_LENGTH);
+    g_assert_cmpint (fpi_validity_a2_check_rom_info (NULL, 38), ==,
+                     VALIDITY_A2_ROM_BAD_LENGTH);
+    g_assert_false (fpi_validity_a2_rom_info_gate (NULL, 38, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+  }
+}
+
+/* 43 02: the real reply passes; "no fwext" (wire b0 04) and every other
+ * failure is refused, naming the file that would be needed */
+static void
+test_a2_fwext_gate (void)
+{
+  static const guint8 no_fw[] = { 0xb0, 0x04 };
+  static const guint8 busy[] = { 0x01, 0x04 };
+  static const guint8 ok_short[] = { 0x00, 0x00, 0x01, 0x00, 0x03 };
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_true (fpi_validity_a2_fwext_gate (a2_fwext_info_reply,
+                                               sizeof (a2_fwext_info_reply),
+                                               &error));
+    g_assert_no_error (error);
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_false (fpi_validity_a2_fwext_gate (no_fw, sizeof (no_fw), &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+    g_assert_nonnull (strstr (error->message, "0x04b0"));
+    g_assert_nonnull (strstr (error->message, "6_07f_lenovo_sm_qm.xpfwext"));
+    g_assert_nonnull (strstr (error->message, "never uploads"));
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_false (fpi_validity_a2_fwext_gate (busy, sizeof (busy), &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_test_expect_message ("libfprint-validity", G_LOG_LEVEL_WARNING,
+                           "*too short*");
+    g_assert_false (fpi_validity_a2_fwext_gate (ok_short, sizeof (ok_short),
+                                                &error));
+    g_test_assert_expected_messages ();
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_false (fpi_validity_a2_fwext_gate (no_fw, 1, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+  }
+}
+
+/* 06<init>: only 0x0000 continues. The vendor driver's other "success"
+ * codes and busy are refused too; nothing is retried. */
+static void
+test_a2_init_gate (void)
+{
+  static const guint8 accepted[] = { 0x00, 0x00 };   /* real reply */
+
+  static const struct
+  {
+    guint8       wire[2];
+    const gchar *message;
+  } rejected[] = {
+    { { 0xbe, 0x04 }, "0x04be" },   /* init blob rejected */
+    { { 0x01, 0x04 }, "0x0401" },   /* busy: not retried */
+    { { 0x12, 0x04 }, "0x0412" },
+    { { 0x91, 0x04 }, "0x0491" },
+    { { 0xae, 0x04 }, "0x04ae" },
+  };
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_true (fpi_validity_a2_init_gate (accepted, sizeof (accepted),
+                                              &error));
+    g_assert_no_error (error);
+  }
+
+  for (gsize i = 0; i < G_N_ELEMENTS (rejected); i++)
+    {
+      g_autoptr(GError) error = NULL;
+
+      g_assert_false (fpi_validity_a2_init_gate (rejected[i].wire, 2, &error));
+      g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
+      g_assert_nonnull (strstr (error->message, rejected[i].message));
+      g_assert_nonnull (strstr (error->message, "not retrying"));
+    }
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_false (fpi_validity_a2_init_gate (accepted, 1, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_false (fpi_validity_a2_init_gate (NULL, 0, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_PROTO);
+  }
+}
+
+/* The init blob is pinned: only 581 bytes starting with 06 whose SHA-256
+ * is the reviewed one. The real blob is not in the tree (it comes from the
+ * vendor driver), so the check is exercised with a synthetic blob and its
+ * own digest; the production wrapper is tested against the pinned values
+ * and, if VALIDITY_TEST_A2_DATA_DIR names a data package, the real file. */
+static void
+test_a2_init_blob_pin (void)
+{
+  g_autofree guint8 *blob = g_malloc (VALIDITY_A2_INIT_BLOB_LEN);
+  g_autofree gchar *digest = NULL;
+  g_autofree guint8 *dbwe = g_malloc0 (2693);
+
+  g_assert_cmpuint (VALIDITY_A2_INIT_BLOB_LEN, ==, 581);
+  g_assert_cmpstr (VALIDITY_A2_INIT_BLOB_SHA256, ==,
+                   "0f3128a1c93b49f0a5162bbad26b22ae02f539ab0668678ea090449922e39674");
+
+  blob[0] = 0x06;
+  for (gsize i = 1; i < VALIDITY_A2_INIT_BLOB_LEN; i++)
+    blob[i] = (guint8) (i * 13 + 1);
+  digest = g_compute_checksum_for_data (G_CHECKSUM_SHA256, blob,
+                                        VALIDITY_A2_INIT_BLOB_LEN);
+
+  /* The check itself: length, first byte, digest */
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_true (fpi_validity_a2_init_blob_check (blob, VALIDITY_A2_INIT_BLOB_LEN,
+                                                    VALIDITY_A2_INIT_BLOB_LEN,
+                                                    digest, &error));
+    g_assert_no_error (error);
+  }
+
+  /* one byte changed */
+  {
+    g_autoptr(GError) error = NULL;
+
+    blob[300] ^= 0x01;
+    g_assert_false (fpi_validity_a2_init_blob_check (blob, VALIDITY_A2_INIT_BLOB_LEN,
+                                                     VALIDITY_A2_INIT_BLOB_LEN,
+                                                     digest, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    g_assert_nonnull (strstr (error->message, "not sending it"));
+    blob[300] ^= 0x01;
+  }
+
+  /* the 580-byte body without its 06; a truncated blob; no blob */
+  {
+    g_autoptr(GError) e1 = NULL;
+    g_autoptr(GError) e2 = NULL;
+    g_autoptr(GError) e3 = NULL;
+    g_autoptr(GError) e4 = NULL;
+
+    g_assert_false (fpi_validity_a2_init_blob_check (blob + 1,
+                                                     VALIDITY_A2_INIT_BLOB_LEN - 1,
+                                                     VALIDITY_A2_INIT_BLOB_LEN,
+                                                     digest, &e1));
+    g_assert_error (e1, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    g_assert_false (fpi_validity_a2_init_blob_check (blob,
+                                                     VALIDITY_A2_INIT_BLOB_LEN - 1,
+                                                     VALIDITY_A2_INIT_BLOB_LEN,
+                                                     digest, &e2));
+    g_assert_error (e2, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    g_assert_false (fpi_validity_a2_init_blob_check (NULL, 0,
+                                                     VALIDITY_A2_INIT_BLOB_LEN,
+                                                     digest, &e3));
+    g_assert_error (e3, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    g_assert_false (fpi_validity_a2_init_blob_check (blob, 0, 0, digest, &e4));
+    g_assert_error (e4, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+  }
+
+  /* right length and digest, but not a 06 command */
+  {
+    g_autoptr(GError) error = NULL;
+    g_autofree gchar *d2 = NULL;
+
+    blob[0] = 0x4f;
+    d2 = g_compute_checksum_for_data (G_CHECKSUM_SHA256, blob,
+                                      VALIDITY_A2_INIT_BLOB_LEN);
+    g_assert_false (fpi_validity_a2_init_blob_check (blob, VALIDITY_A2_INIT_BLOB_LEN,
+                                                     VALIDITY_A2_INIT_BLOB_LEN,
+                                                     d2, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    blob[0] = 0x06;
+  }
+
+  /* The pinned wrapper refuses the synthetic blob, a db_write_enable-sized
+   * 06 blob and nothing at all */
+  {
+    g_autoptr(GError) e1 = NULL;
+    g_autoptr(GError) e2 = NULL;
+    g_autoptr(GError) e3 = NULL;
+
+    g_assert_false (fpi_validity_a2_init_blob_ok (blob, VALIDITY_A2_INIT_BLOB_LEN,
+                                                  &e1));
+    g_assert_error (e1, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    g_assert_nonnull (strstr (e1->message, digest));
+    g_assert_nonnull (strstr (e1->message, VALIDITY_A2_INIT_BLOB_SHA256));
+
+    dbwe[0] = 0x06;
+    g_assert_false (fpi_validity_a2_init_blob_ok (dbwe, 2693, &e2));
+    g_assert_error (e2, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+    g_assert_false (fpi_validity_a2_init_blob_ok (NULL, 0, &e3));
+    g_assert_error (e3, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_INVALID);
+  }
+
+  /* The real blob from a local data package, when one is named */
+  {
+    const gchar *dir = g_getenv ("VALIDITY_TEST_A2_DATA_DIR");
+
+    if (dir && *dir)
+      {
+        g_autofree gchar *path = g_build_filename (dir, "06cb_00a2", "init.bin",
+                                                   NULL);
+        g_autoptr(GError) error = NULL;
+        ValidityDataStore store;
+        const guint8 *data;
+        gsize len = 0;
+
+        validity_data_store_init (&store);
+        g_assert_true (validity_data_load_file (&store, VALIDITY_DATA_INIT, path,
+                                                &error));
+        g_assert_no_error (error);
+        data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+        g_assert_true (fpi_validity_a2_init_blob_ok (data, len, &error));
+        g_assert_no_error (error);
+        validity_data_store_free (&store);
+        g_test_message ("real init blob %s: accepted by the pin", path);
+      }
+    else
+      {
+        g_test_message ("VALIDITY_TEST_A2_DATA_DIR not set: real blob not checked");
+      }
+  }
+}
+
+/* A restricted policy keeps only what it sends: init. Blobs for
+ * provisioning, clean_slate and DB writes are dropped at load. */
+static void
+test_a2_drop_unused_data (void)
+{
+  static const guint8 b[] = { 0x06, 0x01 };
+  const ValidityDataTag device_tags[] = {
+    VALIDITY_DATA_INIT, VALIDITY_DATA_INIT_CLEAN_SLATE,
+    VALIDITY_DATA_RESET, VALIDITY_DATA_DB_WRITE_ENABLE,
+  };
+  ValidityDataStore store;
+
+  g_assert_true (fpi_validity_policy_uses_db_write_enable (fpi_validity_device_policy (VALIDITY_DEV_A2)));
+  g_assert_true (fpi_validity_policy_uses_db_write_enable (fpi_validity_device_policy (VALIDITY_DEV_9A)));
+
+  for (gint permissive = 0; permissive <= 1; permissive++)
+    {
+      const ValidityDevicePolicy *policy =
+        fpi_validity_device_policy (permissive ? VALIDITY_DEV_9A : VALIDITY_DEV_A2);
+
+      validity_data_store_init (&store);
+      for (gsize i = 0; i < G_N_ELEMENTS (device_tags); i++)
+        store.entries[device_tags[i]] = g_bytes_new (b, sizeof (b));
+      store.entries[VALIDITY_DATA_TLS_PASSWORD] = g_bytes_new (b, sizeof (b));
+
+      g_assert_cmpuint (fpi_validity_policy_drop_unused_data (policy, &store), ==,
+                        permissive ? 0 : 2);
+      g_assert_nonnull (store.entries[VALIDITY_DATA_INIT]);
+      g_assert_nonnull (store.entries[VALIDITY_DATA_TLS_PASSWORD]);
+      g_assert_true ((store.entries[VALIDITY_DATA_RESET] != NULL) == permissive);
+      g_assert_true ((store.entries[VALIDITY_DATA_INIT_CLEAN_SLATE] != NULL) ==
+                     permissive);
+      g_assert_nonnull (store.entries[VALIDITY_DATA_DB_WRITE_ENABLE]);
+
+      /* idempotent */
+      g_assert_cmpuint (fpi_validity_policy_drop_unused_data (policy, &store), ==, 0);
+      validity_data_store_free (&store);
+    }
+}
+
+/* A type that is never provisioned gets REFUSE_POLICY at 0 partitions
+ * (also from a reconnect) and never PROVISION; partitioned sensors are
+ * decided as before. With provisioning allowed nothing changes. */
+static void
+test_pair_decide_for_policy (void)
+{
+  const ValidityTlsFlashClass classes[] = {
+    VALIDITY_TLS_FLASH_KEYS_PRESENT,
+    VALIDITY_TLS_FLASH_BLANK,
+    VALIDITY_TLS_FLASH_PARTIAL,
+    VALIDITY_TLS_FLASH_UNREADABLE,
+    (ValidityTlsFlashClass) 99,
+  };
+  const guint16 counts[] = { 0, 1, 5, 0xffff };
+
+  for (gsize c = 0; c < G_N_ELEMENTS (counts); c++)
+    for (gsize i = 0; i < G_N_ELEMENTS (classes); i++)
+      for (gint check_only = 0; check_only <= 1; check_only++)
+        {
+          ValidityPairDecision base = validity_pair_decide (counts[c],
+                                                            classes[i],
+                                                            check_only);
+          ValidityPairDecision allowed =
+            validity_pair_decide_for_policy (counts[c], classes[i],
+                                             check_only, TRUE);
+          ValidityPairDecision forbidden =
+            validity_pair_decide_for_policy (counts[c], classes[i],
+                                             check_only, FALSE);
+
+          g_assert_cmpint (allowed, ==, base);
+          g_assert_cmpint (forbidden, !=, VALIDITY_PAIR_PROVISION);
+
+          if (counts[c] == 0)
+            g_assert_cmpint (forbidden, ==, VALIDITY_PAIR_REFUSE_POLICY);
+          else
+            g_assert_cmpint (forbidden, ==, base);
+        }
+
+  /* The policy of 00a2 forbids provisioning: its open can only ever reach
+   * NOT_NEEDED (keys present) or a refusal */
+  g_assert_false (fpi_validity_device_policy (VALIDITY_DEV_A2)->allow_provisioning);
+  g_assert_cmpint (validity_pair_decide_for_policy (5, VALIDITY_TLS_FLASH_KEYS_PRESENT,
+                                                    FALSE, FALSE),
+                   ==, VALIDITY_PAIR_NOT_NEEDED);
 }
 
 /* ================================================================
@@ -1038,6 +1755,81 @@ test_fw_info_parse_absent (void)
 }
 
 /* ================================================================
+ * T3.2-wire: "no fwext" decoded from the wire bytes
+ *
+ * GET_FW_INFO answers the two bytes b0 04 when no firmware extension is
+ * loaded (python-validity flash.py checks rsp[0]==0xb0, rsp[1]==4). The
+ * status is decoded u16 LE, so that is 0x04b0; the constant used to be
+ * 0xb004 and the absent case was never recognised. Feed the wire bytes
+ * through vcsfw_parse_status(), the decode every transfer callback uses.
+ * ================================================================ */
+static void
+test_fw_info_parse_absent_wire (void)
+{
+  static const guint8 no_fw_wire[] = { 0xb0, 0x04 };
+  static const guint8 swapped_wire[] = { 0x04, 0xb0 };
+  ValidityFwInfo info;
+  guint16 status = 0xffff;
+
+  g_assert_true (vcsfw_parse_status (no_fw_wire, sizeof (no_fw_wire),
+                                     &status));
+  g_assert_cmphex (status, ==, 0x04b0);
+  g_assert_cmphex (status, ==, VCSFW_STATUS_NO_FW);
+
+  g_assert_true (validity_fwext_parse_fw_info (no_fw_wire + 2,
+                                               sizeof (no_fw_wire) - 2,
+                                               status, &info));
+  g_assert_false (info.loaded);
+
+  /* The byte-swapped value is just an unknown status, not "no fwext" */
+  g_assert_true (vcsfw_parse_status (swapped_wire, sizeof (swapped_wire),
+                                     &status));
+  g_assert_cmphex (status, ==, 0xb004);
+  g_test_expect_message ("libfprint-validity", G_LOG_LEVEL_WARNING,
+                         "*unexpected status*");
+  g_assert_false (validity_fwext_parse_fw_info (NULL, 0, status, &info));
+  g_test_assert_expected_messages ();
+  g_assert_false (info.loaded);
+
+  /* A reply shorter than the status cannot be decoded */
+  g_assert_false (vcsfw_parse_status (no_fw_wire, 1, &status));
+  g_assert_false (vcsfw_parse_status (NULL, 0, &status));
+}
+
+/* ================================================================
+ * T3.2-real: the real 06cb:00a2 GET_FW_INFO (43 02) reply
+ *
+ * fwext 6_07f_lenovo_sm_qm 1.3.6: version 1.3, build time 0x5e2ecf6e,
+ * seven modules (imager first, 16320 bytes).
+ * ================================================================ */
+static void
+test_fw_info_parse_real_a2 (void)
+{
+  ValidityFwInfo info;
+  guint16 status = 0xffff;
+
+  g_assert_true (vcsfw_parse_status (a2_fwext_info_reply,
+                                     sizeof (a2_fwext_info_reply), &status));
+  g_assert_cmphex (status, ==, VCSFW_STATUS_OK);
+
+  g_assert_true (validity_fwext_parse_fw_info (a2_fwext_info_reply + 2,
+                                               sizeof (a2_fwext_info_reply) - 2,
+                                               status, &info));
+  g_assert_true (info.loaded);
+  g_assert_cmpuint (info.major, ==, 1);
+  g_assert_cmpuint (info.minor, ==, 3);
+  g_assert_cmpuint (info.buildtime, ==, 0x5e2ecf6e);
+  g_assert_cmpuint (info.module_count, ==, 7);
+  g_assert_cmpuint (info.modules[0].type, ==, 1);
+  g_assert_cmphex (info.modules[0].subtype, ==, 0x4634);
+  g_assert_cmpuint (info.modules[0].major, ==, 2);
+  g_assert_cmpuint (info.modules[0].minor, ==, 7);
+  g_assert_cmpuint (info.modules[0].size, ==, 16320);
+  g_assert_cmpuint (info.modules[6].type, ==, 1);
+  g_assert_cmpuint (info.modules[6].size, ==, 0x460);
+}
+
+/* ================================================================
  * T3.2b: test_fw_info_parse_unknown_status
  *
  * Verify that an unexpected status returns FALSE.
@@ -1415,6 +2207,8 @@ test_firmware_filename (void)
     { 0x06cb, 0x00b7, "6_07f_hp_cmit_mis_qm.xpfwext", "HP SoftPaq sp135736" },
     { 0x06cb, 0x00cb, "6_07f_hp_mis_qm.xpfwext", "HP SoftPaq sp138431" },
     { 0x06cb, 0x00d2, "6_07f_hp_mis_qm.xpfwext", "HP SoftPaq sp138431" },
+    { 0x06cb, 0x00a2, "6_07f_lenovo_sm_qm.xpfwext",
+      "Lenovo's fingerprint driver installer r0yfp10w.exe (MUC 5.2.326.26)" },
   };
   const gchar *name;
   const gchar *source;
@@ -3912,6 +4706,384 @@ test_psk_from_files (void)
   check_psk_from_files (NULL, KAT_HP_SERIAL "\n", NULL,
                         kat_vbox_enc, kat_vbox_val);
   check_psk_from_files (NULL, NULL, NULL, kat_vbox_enc, kat_vbox_val);
+}
+
+/* ================================================================
+ * Tests: developer-only overrides (meson -Dvalidity_dev=true)
+ *
+ * The readers are compiled in every build and tested here; only the
+ * environment lookups depend on the option, and in a build without it
+ * the variables must be ignored.
+ * ================================================================ */
+
+static gchar *
+dev_write_file (const gchar *dir,
+                const gchar *name,
+                const gchar *content,
+                gssize       len,
+                gint         mode)
+{
+  gchar *path = g_build_filename (dir, name, NULL);
+
+  g_assert_true (g_file_set_contents (path, content, len, NULL));
+  g_assert_cmpint (g_chmod (path, mode), ==, 0);
+  return path;
+}
+
+static void
+dev_check_serial_refused (const gchar *path,
+                          const gchar *want_in_message)
+{
+  g_autoptr(GError) error = NULL;
+  gchar *serial = (gchar *) "unset";
+
+  g_assert_false (validity_tls_read_serial_file (path, &serial, &error));
+  g_assert_null (serial);
+  g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL);
+  if (want_in_message)
+    g_assert_nonnull (strstr (error->message, want_in_message));
+  /* The value is never echoed */
+  g_assert_null (strstr (error->message, "SECRET"));
+}
+
+/* The serial file reader fails closed on anything but a private,
+ * single-line, printable file, and never puts the value in an error */
+static void
+test_dev_serial_file_read (void)
+{
+  g_autofree gchar *dir = g_dir_make_tmp ("validity-dev-XXXXXX", NULL);
+  g_autofree gchar *good = NULL;
+  g_autofree gchar *group = NULL;
+  g_autofree gchar *link = NULL;
+  g_autofree gchar *empty = NULL;
+  g_autofree gchar *blank = NULL;
+  g_autofree gchar *big = NULL;
+  g_autofree gchar *ctrl = NULL;
+  g_autofree gchar *nul = NULL;
+  g_autofree gchar *high = NULL;
+  g_autofree gchar *missing = NULL;
+  g_autofree gchar *big_content = g_strnfill (300, 'S');
+  gchar *serial = NULL;
+
+  g_assert_nonnull (dir);
+
+  /* Good: stripped like the sysfs value */
+  good = dev_write_file (dir, "good", "  SECRET-SN 01\t\n", -1, 0600);
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_true (validity_tls_read_serial_file (good, &serial, &error));
+    g_assert_no_error (error);
+    g_assert_cmpstr (serial, ==, "SECRET-SN 01");
+    validity_tls_free_secret_string (serial);
+    serial = NULL;
+  }
+  /* Read-only for the owner is fine too */
+  g_assert_cmpint (g_chmod (good, 0400), ==, 0);
+  {
+    g_autoptr(GError) error = NULL;
+
+    g_assert_true (validity_tls_read_serial_file (good, &serial, &error));
+    validity_tls_free_secret_string (serial);
+    serial = NULL;
+  }
+
+  group = dev_write_file (dir, "group", "SECRET\n", -1, 0640);
+  dev_check_serial_refused (group, "chmod 600");
+  g_assert_cmpint (g_chmod (group, 0604), ==, 0);
+  dev_check_serial_refused (group, "chmod 600");
+
+  link = g_build_filename (dir, "link", NULL);
+  g_assert_cmpint (symlink (good, link), ==, 0);
+  dev_check_serial_refused (link, "symbolic links");
+
+  empty = dev_write_file (dir, "empty", "", 0, 0600);
+  dev_check_serial_refused (empty, "empty");
+  blank = dev_write_file (dir, "blank", " \n\t\n", -1, 0600);
+  dev_check_serial_refused (blank, "empty");
+
+  big = dev_write_file (dir, "big", big_content, -1, 0600);
+  dev_check_serial_refused (big, "larger than");
+
+  ctrl = dev_write_file (dir, "ctrl", "SECRET\001X\n", -1, 0600);
+  dev_check_serial_refused (ctrl, "printable");
+  high = dev_write_file (dir, "high", "SECRET\303\251\n", -1, 0600);
+  dev_check_serial_refused (high, "printable");
+  nul = dev_write_file (dir, "nul", "SECRET\0X\n", 9, 0600);
+  dev_check_serial_refused (nul, "NUL");
+  {
+    g_autofree gchar *two = dev_write_file (dir, "two", "SECRET\nSECOND\n",
+                                            -1, 0600);
+
+    dev_check_serial_refused (two, "printable");
+    g_remove (two);
+  }
+
+  missing = g_build_filename (dir, "missing", NULL);
+  dev_check_serial_refused (missing, "cannot be opened");
+  dev_check_serial_refused (dir, "not a regular file");
+  /* A FIFO with no writer is refused at once (opening it used to block) */
+  {
+    g_autofree gchar *fifo = g_build_filename (dir, "fifo", NULL);
+
+    g_assert_cmpint (mkfifo (fifo, 0600), ==, 0);
+    dev_check_serial_refused (fifo, "not a regular file");
+    g_remove (fifo);
+  }
+  /* Leading whitespace (the text moves to the front of the buffer) */
+  {
+    g_autofree gchar *lead = dev_write_file (dir, "lead", "\t\t  SECRET-SN 02",
+                                             -1, 0600);
+    g_autoptr(GError) error = NULL;
+
+    g_assert_true (validity_tls_read_serial_file (lead, &serial, &error));
+    g_assert_cmpstr (serial, ==, "SECRET-SN 02");
+    validity_tls_free_secret_string (serial);
+    serial = NULL;
+    g_remove (lead);
+  }
+  dev_check_serial_refused ("relative/dmi_serial", "absolute");
+  dev_check_serial_refused (NULL, "absolute");
+
+  g_remove (good);
+  g_remove (group);
+  g_remove (link);
+  g_remove (empty);
+  g_remove (blank);
+  g_remove (big);
+  g_remove (ctrl);
+  g_remove (high);
+  g_remove (nul);
+  g_rmdir (dir);
+}
+
+/* The override file gives the same PSK as the sysfs files with the same
+* values (python-validity KAT), and there is no VirtualBox/0 fallback */
+static void
+test_dev_serial_file_psk (void)
+{
+  g_autofree gchar *dir = g_dir_make_tmp ("validity-dev-XXXXXX", NULL);
+  g_autofree gchar *name = NULL;
+  g_autofree gchar *serial = NULL;
+  g_autofree gchar *missing = NULL;
+  g_autofree gchar *open_serial = NULL;
+
+  g_assert_nonnull (dir);
+  name = dev_write_file (dir, "product_name", KAT_HP_NAME "\n", -1, 0644);
+  serial = dev_write_file (dir, "dmi_serial", KAT_HP_SERIAL "\n", -1, 0600);
+  open_serial = dev_write_file (dir, "open_serial", KAT_HP_SERIAL "\n", -1,
+                                0644);
+  missing = g_build_filename (dir, "missing", NULL);
+
+  {
+    g_autoptr(GError) error = NULL;
+    ValidityTlsState tls;
+
+    psk_kat_init (&tls);
+    g_assert_true (validity_tls_derive_psk_with_serial_file (&tls, name,
+                                                             serial, &error));
+    g_assert_no_error (error);
+    check_psk (&tls, kat_hp_enc, kat_hp_val);
+    validity_tls_free (&tls);
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+    ValidityTlsState tls;
+
+    psk_kat_init (&tls);
+    g_assert_false (validity_tls_derive_psk_with_serial_file (&tls, missing,
+                                                              serial, &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL);
+    validity_tls_free (&tls);
+  }
+
+  {
+    g_autoptr(GError) error = NULL;
+    ValidityTlsState tls;
+
+    psk_kat_init (&tls);
+    g_assert_false (validity_tls_derive_psk_with_serial_file (&tls, name,
+                                                              open_serial,
+                                                              &error));
+    g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_GENERAL);
+    g_assert_null (strstr (error->message, KAT_HP_SERIAL));
+    validity_tls_free (&tls);
+  }
+
+  g_remove (name);
+  g_remove (serial);
+  g_remove (open_serial);
+  g_rmdir (dir);
+}
+
+static gchar *
+dev_write_data_file (const gchar  *dir,
+                     const gchar  *name,
+                     const guint8 *payload,
+                     gsize         len)
+{
+  static const gchar key[] = "libfprint-validity-data-integrit";
+
+  g_autoptr(GHmac) hmac = g_hmac_new (G_CHECKSUM_SHA256, (const guchar *) key,
+                                      32);
+  guint8 digest[32];
+  gsize digest_len = sizeof (digest);
+  g_autofree guint8 *content = g_malloc (len + sizeof (digest));
+  gchar *path = g_build_filename (dir, name, NULL);
+
+  g_hmac_update (hmac, payload, len);
+  g_hmac_get_digest (hmac, digest, &digest_len);
+  memcpy (content, payload, len);
+  memcpy (content + len, digest, sizeof (digest));
+  g_assert_true (g_file_set_contents (path, (const gchar *) content,
+                                      len + sizeof (digest), NULL));
+  return path;
+}
+
+/* FP_VALIDITY_DATA_DIR: resolution is strict, and the directory is the only
+ * place searched (developer build); a build without the option ignores
+ * the variable */
+static void
+test_dev_data_dir (void)
+{
+  static const guint8 init_payload[] = { 0x06, 0x02, 0x00, 0x00, 0x01 };
+  g_autofree gchar *dir = g_dir_make_tmp ("validity-dev-XXXXXX", NULL);
+  g_autofree gchar *devdir = NULL;
+  g_autofree gchar *init = NULL;
+  g_autofree gchar *file = NULL;
+
+  g_assert_nonnull (dir);
+  devdir = g_build_filename (dir, "06cb_00a2", NULL);
+  g_assert_cmpint (g_mkdir (devdir, 0700), ==, 0);
+  init = dev_write_data_file (devdir, "init.bin", init_payload,
+                              sizeof (init_payload));
+  file = dev_write_file (dir, "not-a-dir", "x", -1, 0600);
+
+  /* Resolution */
+  {
+    g_auto(GStrv) paths = validity_data_resolve_search_paths (NULL, NULL);
+
+    g_assert_cmpuint (g_strv_length (paths), ==,
+                      g_strv_length ((gchar **) validity_data_search_paths));
+    for (guint i = 0; paths[i]; i++)
+      g_assert_cmpstr (paths[i], ==, validity_data_search_paths[i]);
+  }
+  {
+    g_auto(GStrv) paths = validity_data_resolve_search_paths (dir, NULL);
+
+    g_assert_cmpuint (g_strv_length (paths), ==, 1);
+    g_assert_cmpstr (paths[0], ==, dir);
+  }
+  {
+    const gchar *bad[] = { "", "relative/dir", "/nonexistent-validity-dir",
+                           file };
+
+    for (gsize i = 0; i < G_N_ELEMENTS (bad); i++)
+      {
+        g_autoptr(GError) error = NULL;
+
+        g_assert_null (validity_data_resolve_search_paths (bad[i], &error));
+        g_assert_error (error, FP_DEVICE_ERROR,
+                        FP_DEVICE_ERROR_DATA_NOT_FOUND);
+      }
+  }
+
+  g_setenv (VALIDITY_DATA_DIR_ENV, dir, TRUE);
+  g_setenv (VALIDITY_DMI_SERIAL_FILE_ENV, file, TRUE);
+
+  if (validity_dev_overrides_built ())
+    {
+      ValidityDataStore store;
+      gsize len = 0;
+      const guint8 *data;
+
+      g_assert_cmpstr (validity_data_dev_dir (), ==, dir);
+      g_assert_cmpstr (validity_tls_dev_serial_file (), ==, file);
+
+      /* The device blobs load from the override directory */
+      validity_data_store_init (&store);
+      {
+        g_autoptr(GError) error = NULL;
+
+        g_assert_true (validity_data_load_device (&store, 0x06cb, 0x00a2,
+                                                  &error));
+        g_assert_no_error (error);
+      }
+      data = validity_data_get_bytes (&store, VALIDITY_DATA_INIT, &len);
+      g_assert_cmpmem (data, len, init_payload, sizeof (init_payload));
+      g_assert_null (validity_data_get (&store, VALIDITY_DATA_RESET));
+
+      /* No fallback to the system paths for missing files */
+      {
+        g_autoptr(GError) error = NULL;
+
+        g_assert_false (validity_data_load_common (&store, &error));
+        g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND);
+        g_assert_nonnull (strstr (error->message, dir));
+        g_assert_null (strstr (error->message, "/usr/share/libfprint"));
+      }
+      {
+        g_autoptr(GError) error = NULL;
+
+        g_assert_false (validity_data_load_device (&store, 0x06cb, 0x009a,
+                                                   &error));
+        g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND);
+        g_assert_null (strstr (error->message, "/usr/share/libfprint"));
+      }
+      validity_data_store_free (&store);
+
+      /* A bad value fails closed */
+      g_setenv (VALIDITY_DATA_DIR_ENV, "relative", TRUE);
+      validity_data_store_init (&store);
+      {
+        g_autoptr(GError) error = NULL;
+
+        g_assert_false (validity_data_load_device (&store, 0x06cb, 0x00a2,
+                                                   &error));
+        g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_DATA_NOT_FOUND);
+      }
+      validity_data_store_free (&store);
+
+      /* The serial override is used, and fails closed (not 0600) */
+      {
+        g_autoptr(GError) error = NULL;
+        ValidityTlsState tls;
+
+        g_assert_cmpint (g_chmod (file, 0644), ==, 0);
+        psk_kat_init (&tls);
+        g_assert_false (validity_tls_derive_psk_checked (&tls, &error));
+        g_assert_nonnull (error);
+        validity_tls_free (&tls);
+      }
+    }
+  else
+    {
+      ValidityDataStore store;
+
+      g_assert_null (validity_data_dev_dir ());
+      g_assert_null (validity_tls_dev_serial_file ());
+
+      /* The override directory is never searched */
+      validity_data_store_init (&store);
+      {
+        g_autoptr(GError) error = NULL;
+
+        if (!validity_data_load_device (&store, 0x06cb, 0x00a2, &error))
+          g_assert_null (strstr (error->message, dir));
+        else
+          g_assert_null (strstr (dir, "/usr/share"));
+      }
+      validity_data_store_free (&store);
+    }
+
+  g_unsetenv (VALIDITY_DATA_DIR_ENV);
+  g_unsetenv (VALIDITY_DMI_SERIAL_FILE_ENV);
+
+  g_remove (init);
+  g_rmdir (devdir);
+  g_remove (file);
+  g_rmdir (dir);
 }
 
 /* ================================================================
@@ -6700,6 +7872,8 @@ test_data_load_device_corrupt (void)
  * Main
  * ================================================================ */
 
+#include "test-validity-a2-capture.h"
+
 int
 main (int argc, char *argv[])
 {
@@ -6727,6 +7901,70 @@ main (int argc, char *argv[])
                    test_hal_blob_sizes);
   g_test_add_func ("/validity/hal/lookup-consistency",
                    test_hal_lookup_consistency);
+  g_test_add_func ("/validity/hal/a2-matches-real-flash-info",
+                   test_hal_a2_matches_real_flash_info);
+
+  /* 06cb:00a2 policy and safety gates */
+  g_test_add_func ("/validity/a2/device-policy", test_a2_device_policy);
+  g_test_add_func ("/validity/a2/rom-gate/real", test_a2_rom_gate_real);
+  g_test_add_func ("/validity/a2/rom-gate/negative",
+                   test_a2_rom_gate_negative);
+  g_test_add_func ("/validity/a2/fwext-gate", test_a2_fwext_gate);
+  g_test_add_func ("/validity/a2/init-gate", test_a2_init_gate);
+  g_test_add_func ("/validity/a2/probe-features", test_a2_probe_features);
+  g_test_add_func ("/validity/a2/init-action", test_a2_init_action);
+  g_test_add_func ("/validity/a2/init-blob-pin", test_a2_init_blob_pin);
+  g_test_add_func ("/validity/a2/drop-unused-data", test_a2_drop_unused_data);
+  g_test_add_func ("/validity/a2/no-reconnect", test_a2_no_reconnect);
+  g_test_add_func ("/validity/a2/sensor-gate", test_a2_sensor_gate);
+  g_test_add_func ("/validity/a2/sensor-gate/real-setup",
+                   test_a2_sensor_gate_real_setup);
+  g_test_add_func ("/validity/a2/capture/vfunc-dev-only",
+                   test_a2_capture_vfunc_dev_only);
+  g_test_add_func ("/validity/a2/events/capture", test_a2_capture_events);
+  g_test_add_func ("/validity/a2/events/match", test_a2_match_events);
+  g_test_add_func ("/validity/a2/image/header", test_a2_image_header);
+  g_test_add_func ("/validity/a2/image/flags", test_a2_image_flags);
+  g_test_add_func ("/validity/a2/readout/two-chunks",
+                   test_a2_readout_two_chunks);
+  g_test_add_func ("/validity/a2/readout/surplus", test_a2_readout_surplus);
+  g_test_add_func ("/validity/a2/readout/errors", test_a2_readout_errors);
+  g_test_add_func ("/validity/a2/readout/geometry", test_a2_readout_geometry);
+  g_test_add_func ("/validity/a2/readout/statuses", test_a2_readout_statuses);
+  g_test_add_func ("/validity/a2/match-result/parse",
+                   test_a2_match_result_parse);
+  g_test_add_func ("/validity/a2/flow/verify-no-match",
+                   test_a2_flow_verify_no_match);
+  g_test_add_func ("/validity/a2/flow/verify-match", test_a2_flow_verify_match);
+  g_test_add_func ("/validity/a2/flow/no-match-paths",
+                   test_a2_flow_no_match_paths);
+  g_test_add_func ("/validity/a2/flow/match-errors", test_a2_flow_match_errors);
+  g_test_add_func ("/validity/a2/flow/stale-report", test_a2_flow_stale_report);
+  g_test_add_func ("/validity/a2/flow/transport-error",
+                   test_a2_flow_transport_error);
+  g_test_add_func ("/validity/a2/flow/cancel-finger-wait",
+                   test_a2_flow_cancel_finger_wait);
+  g_test_add_func ("/validity/a2/flow/cancel-readout",
+                   test_a2_flow_cancel_readout);
+  g_test_add_func ("/validity/a2/flow/cancel-match-wait",
+                   test_a2_flow_cancel_match_wait);
+  g_test_add_func ("/validity/a2/flow/cancel-after-result",
+                   test_a2_flow_cancel_after_result);
+  g_test_add_func ("/validity/a2/flow/abort-rearm", test_a2_flow_abort_rearm);
+  g_test_add_func ("/validity/a2/flow/readout-statuses",
+                   test_a2_flow_readout_statuses);
+  g_test_add_func ("/validity/a2/flow/bad-capture", test_a2_flow_bad_capture);
+  g_test_add_func ("/validity/a2/flow/capture-errors",
+                   test_a2_flow_capture_errors);
+  g_test_add_func ("/validity/a2/flow/empty-bounded",
+                   test_a2_flow_empty_bounded);
+  g_test_add_func ("/validity/a2/flow/image-flags", test_a2_flow_image_flags);
+  g_test_add_func ("/validity/a2/flow/capture-only", test_a2_flow_capture_only);
+  g_test_add_func ("/validity/a2/flow/commands", test_a2_flow_commands);
+  g_test_add_func ("/validity/a2/flow/opcode-inventory",
+                   test_a2_flow_opcode_inventory);
+  g_test_add_func ("/validity/a2/pair-decide-for-policy",
+                   test_pair_decide_for_policy);
 
 
   /* SENSOR tests */
@@ -6796,6 +8034,10 @@ main (int argc, char *argv[])
                    test_fw_info_parse_present);
   g_test_add_func ("/validity/fwext/fw-info/parse-absent",
                    test_fw_info_parse_absent);
+  g_test_add_func ("/validity/fwext/fw-info/parse-absent-wire",
+                   test_fw_info_parse_absent_wire);
+  g_test_add_func ("/validity/fwext/fw-info/parse-real-a2",
+                   test_fw_info_parse_real_a2);
   g_test_add_func ("/validity/fwext/fw-info/parse-unknown-status",
                    test_fw_info_parse_unknown_status);
   g_test_add_func ("/validity/fwext/fw-info/parse-truncated",
@@ -6984,6 +8226,9 @@ main (int argc, char *argv[])
   g_test_add_func ("/validity/tls/psk/python-validity-kat",
                    test_psk_python_validity_kat);
   g_test_add_func ("/validity/tls/psk/from-files", test_psk_from_files);
+  g_test_add_func ("/validity/dev/serial-file-read", test_dev_serial_file_read);
+  g_test_add_func ("/validity/dev/serial-file-psk", test_dev_serial_file_psk);
+  g_test_add_func ("/validity/dev/data-dir", test_dev_data_dir);
   g_test_add_func ("/validity/tls/flash/parse-empty", test_flash_parse_empty);
   g_test_add_func ("/validity/tls/flash/parse-truncated",
                    test_flash_parse_truncated);

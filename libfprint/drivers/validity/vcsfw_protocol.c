@@ -83,7 +83,7 @@ cmd_receive_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  validity_unpack (transfer->buffer, transfer->actual_length, "h", &status);
+  vcsfw_parse_status (transfer->buffer, transfer->actual_length, &status);
 
   fp_dbg ("VCSFW response: status=0x%04x, len=%" G_GSSIZE_FORMAT,
           status, transfer->actual_length - 2);
@@ -256,7 +256,7 @@ tls_cmd_receive_cb (FpiUsbTransfer *transfer,
       return;
     }
 
-  validity_unpack (decrypted, decrypted_len, "h", &status);
+  vcsfw_parse_status (decrypted, decrypted_len, &status);
 
   fp_dbg ("VCSFW TLS response: status=0x%04x, len=%" G_GSIZE_FORMAT,
           status, decrypted_len - 2);
@@ -362,6 +362,22 @@ vcsfw_tls_cmd_send (FpiDeviceValidity *self,
     fpi_ssm_start_subsm (parent_ssm, ssm);
   else
     fpi_ssm_start (ssm, cmd_ssm_done);
+}
+
+/* ---- Reply status ---- */
+
+gboolean
+vcsfw_parse_status (const guint8 *reply,
+                    gsize         reply_len,
+                    guint16      *status)
+{
+  g_return_val_if_fail (status != NULL, FALSE);
+
+  *status = 0;
+  if (reply == NULL || reply_len < 2)
+    return FALSE;
+
+  return validity_unpack (reply, reply_len, "h", status);
 }
 
 /* ---- GET_VERSION (cmd 0x01) response parser ---- */

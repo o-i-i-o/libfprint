@@ -48,6 +48,8 @@
 #include "validity_pack.h"
 #include "fpi-print.h"
 #include "validity.h"
+#include "validity_a2.h"
+#include "validity_a2_capture.h"
 #include "vcsfw_protocol.h"
 
 /* ================================================================
@@ -1045,6 +1047,13 @@ validity_verify (FpDevice *device)
       return;
     }
 
+  /* 06cb:00a2: image-streaming capture and on-chip match */
+  if (fpi_validity_device_policy (self->dev_type)->stream_capture_flow)
+    {
+      fpi_validity_a2_verify (device);
+      return;
+    }
+
   self->identify_mode = FALSE;
   if (self->recovery_redispatch)
     self->recovery_redispatch = FALSE;   /* internal retry -- keep the budget */
@@ -1066,6 +1075,12 @@ validity_identify (FpDevice *device)
   if (self->emulation_prints)
     {
       emulation_identify (device);
+      return;
+    }
+
+  if (fpi_validity_device_policy (self->dev_type)->stream_capture_flow)
+    {
+      fpi_validity_a2_identify (device);
       return;
     }
 
@@ -1463,7 +1478,8 @@ delete_lookup_user (FpiSsm            *ssm,
        * Skip the reclaim if any get_user failed -- an undercount could erase a
        * finger we simply could not read. */
       self->delete_reclaim = (self->delete_scan_ok &&
-                              self->delete_total_fingers == 1);
+                              self->delete_total_fingers == 1 &&
+                              fpi_validity_device_policy (self->dev_type)->allow_reclaim_erase);
       fpi_ssm_jump_to_state (ssm, DELETE_DEL_RECORD);
       return;
     }
@@ -1729,7 +1745,8 @@ delete_ssm_done (FpiSsm   *ssm,
    * never compacts, so the flash stays occupied. When we just deleted the last
    * print, erase the partition to reclaim it (same erase as clear_storage) so
    * the user-facing "remove all prints" flow actually frees space. */
-  if (!error && self->delete_reclaim)
+  if (!error && self->delete_reclaim &&
+      fpi_validity_device_policy (self->dev_type)->allow_reclaim_erase)
     {
       FpiSsm *erase;
 
@@ -1761,6 +1778,22 @@ validity_delete (FpDevice *device)
   FpiSsm *ssm;
 
   G_DEBUG_HERE ();
+
+  /* 06cb:00a2: deleting writes the template DB (48 on the finger record,
+   * then on the emptied user record); not done on this model until it
+   * has an explicit, backed-up flow. probe does not advertise the feature;
+   * this refuses before any command is sent if it is called anyway. */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_delete)
+    {
+      fpi_device_delete_complete (device,
+                                  fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                            "Deleting prints "
+                                                            "from the sensor "
+                                                            "is not supported "
+                                                            "on this sensor "
+                                                            "model yet"));
+      return;
+    }
 
   if (self->emulation_prints)
     {
@@ -1873,6 +1906,21 @@ validity_clear_storage (FpDevice *device)
   FpiSsm *ssm;
 
   G_DEBUG_HERE ();
+
+  /* 06cb:00a2: clear_storage erases the whole template partition (with
+   * db_write_enable); not done on this model until it has an explicit,
+   * backed-up flow. Fail before any command is sent. */
+  if (!fpi_validity_device_policy (self->dev_type)->allow_clear_storage)
+    {
+      fpi_device_clear_storage_complete (device,
+                                         fpi_device_error_new_msg (FP_DEVICE_ERROR_NOT_SUPPORTED,
+                                                                   "Clearing the "
+                                                                   "sensor storage "
+                                                                   "is not supported "
+                                                                   "on this sensor "
+                                                                   "model yet"));
+      return;
+    }
 
   if (self->emulation_prints)
     {
