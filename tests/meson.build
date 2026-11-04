@@ -44,6 +44,7 @@ drivers_tests = {
     'upektc_img-tcs1s': {},
     'uru4000-msv2': {},
     'uru4000-4500': {},
+    'uru4000-4500-fw0115': {},
     'vfs0050': {},
     'vfs301': {},
     'vfs5011': {},
