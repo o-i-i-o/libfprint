@@ -48,6 +48,7 @@ calc_error (struct fpi_frame_asmbl_ctx *ctx,
 {
   unsigned int width, height;
   unsigned int x1, y1, x2, y2, err, i, j;
+  guint64 normalized;
 
   width = ctx->frame_width - (dx > 0 ? dx : -dx);
   height = ctx->frame_height - dy;
@@ -86,10 +87,10 @@ calc_error (struct fpi_frame_asmbl_ctx *ctx,
   while (i < height);
 
   /* Normalize error */
-  err *= (ctx->frame_height * ctx->frame_width);
-  err /= (height * width);
+  normalized = (guint64) err * ctx->frame_height * ctx->frame_width;
+  normalized /= (height * width);
 
-  return err;
+  return (unsigned int) normalized;
 }
 
 /* This function is rather CPU-intensive. It's better to use hardware
