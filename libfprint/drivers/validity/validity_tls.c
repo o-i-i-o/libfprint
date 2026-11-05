@@ -1313,17 +1313,17 @@ validity_tls_parse_server_hello (ValidityTlsState *tls,
   return TRUE;
 }
 
-/* Helper: get public key point bytes from EVP_PKEY as uncompressed.
+/* Write the public key of an EC P-256 key as an uncompressed point,
+ * 0x04 || x || y (65 bytes), and report how many bytes were written so the
+ * caller cannot send the untouched remainder of its buffer.
  *
  * The encoding OSSL_PKEY_PARAM_PUB_KEY yields follows the key's point
- * conversion format, which is not uncompressed on every provider and
- * version (OpenSSL 3.0.2 returns the 33-byte compressed form for a key
- * generated from the group name alone). Ask for uncompressed explicitly,
- * and report how many bytes were actually written so the caller cannot
- * send the untouched remainder of its buffer. */
-static gboolean
-get_ec_pubpoint_bytes (EVP_PKEY *pkey, guint8 *out, gsize out_len,
-                       gsize *written)
+ * conversion format, which is not uncompressed on every provider and version
+ * (OpenSSL 3.0.2 returns the 33-byte compressed form for a key generated from
+ * the group name alone), so the point is built from its coordinates. */
+gboolean
+validity_tls_get_ec_pubpoint (EVP_PKEY *pkey, guint8 *out, gsize out_len,
+                              gsize *written)
 {
   BIGNUM *x = NULL, *y = NULL;
   gboolean ok = FALSE;
@@ -1333,10 +1333,6 @@ get_ec_pubpoint_bytes (EVP_PKEY *pkey, guint8 *out, gsize out_len,
   if (out_len < 1 + 2 * TLS_EC_COORD_SIZE)
     return FALSE;
 
-  /* Build the point from its coordinates rather than reading the encoded
-   * form: OSSL_PKEY_PARAM_PUB_KEY honours the key's conversion format, and
-   * setting that format on an existing EVP_PKEY is not honoured on
-   * OpenSSL 3.0.2 (it keeps returning the 33-byte compressed point). */
   if (EVP_PKEY_get_bn_param (pkey, OSSL_PKEY_PARAM_EC_PUB_X, &x) != 1 ||
       EVP_PKEY_get_bn_param (pkey, OSSL_PKEY_PARAM_EC_PUB_Y, &y) != 1)
     goto out;
@@ -1498,13 +1494,13 @@ validity_tls_build_client_finish (ValidityTlsState *tls, gsize *out_len)
     gsize pubpoint_len = 0;
 
     /* python-validity sends 0x04 || x_be || y_be, so the sensor wants the
-     * uncompressed point; get_ec_pubpoint_bytes builds exactly that. */
-    if (!get_ec_pubpoint_bytes (tls->session_key, pubpoint,
-                                sizeof (pubpoint), &pubpoint_len) ||
+     * uncompressed point; validity_tls_get_ec_pubpoint builds exactly that. */
+    if (!validity_tls_get_ec_pubpoint (tls->session_key, pubpoint,
+                                       sizeof (pubpoint), &pubpoint_len) ||
         pubpoint_len != sizeof (pubpoint) || pubpoint[0] != 0x04)
       {
         /* Anything else would put the untouched tail of the buffer on the
-         * wire; the sensor answers that with a fatal illegal_parameter. */
+        * wire; the sensor answers that with a fatal illegal_parameter. */
         fp_warn ("TLS: ephemeral public key is not a 65-byte uncompressed "
                  "point (got %zu bytes, first byte 0x%02x)",
                  pubpoint_len, pubpoint_len ? pubpoint[0] : 0);

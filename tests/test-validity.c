@@ -3981,6 +3981,79 @@ test_init_free (void)
 }
 
 /* ================================================================
+ * Test: the ClientKeyExchange point is always 65-byte uncompressed
+ *
+ * Regression: the helper read OSSL_PKEY_PARAM_PUB_KEY, whose encoding
+ * depends on the OpenSSL version. OpenSSL 3.0.2 (Ubuntu 22.04) returns the
+ * 33-byte compressed point for a P-256 key, whatever point format is asked
+ * for, so the sensor got the compressed point followed by 32 bytes of
+ * uninitialised stack and answered with a fatal illegal_parameter alert.
+ * 3.0.13 and later return the uncompressed point, so on those versions this
+ * only checks the output; the regression itself shows on 3.0.2.
+ * ================================================================ */
+static EVP_PKEY *
+generate_p256_key (void)
+{
+  /* The same key generation as validity_tls_build_client_finish(). */
+  EVP_PKEY *pkey = NULL;
+  EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_from_name (NULL, "EC", NULL);
+  OSSL_PARAM params[] = {
+    OSSL_PARAM_utf8_string (OSSL_PKEY_PARAM_GROUP_NAME, (char *) "prime256v1", 0),
+    OSSL_PARAM_END,
+  };
+
+  g_assert_nonnull (pctx);
+  g_assert_cmpint (EVP_PKEY_keygen_init (pctx), ==, 1);
+  g_assert_cmpint (EVP_PKEY_CTX_set_params (pctx, params), ==, 1);
+  g_assert_cmpint (EVP_PKEY_generate (pctx, &pkey), ==, 1);
+  EVP_PKEY_CTX_free (pctx);
+
+  return pkey;
+}
+
+static void
+test_kex_point_uncompressed (void)
+{
+  EVP_PKEY *pkey = generate_p256_key ();
+  guint8 point[1 + 2 * TLS_EC_COORD_SIZE];
+  guint8 x_be[TLS_EC_COORD_SIZE], y_be[TLS_EC_COORD_SIZE];
+  BIGNUM *x = NULL, *y = NULL;
+  gsize written = 0;
+
+  /* Poison the buffer so an unwritten tail would show up. */
+  memset (point, 0xaa, sizeof (point));
+  g_assert_true (validity_tls_get_ec_pubpoint (pkey, point, sizeof (point), &written));
+  g_assert_cmpuint (written, ==, sizeof (point));
+
+  g_assert_cmpint (EVP_PKEY_get_bn_param (pkey, OSSL_PKEY_PARAM_EC_PUB_X, &x), ==, 1);
+  g_assert_cmpint (EVP_PKEY_get_bn_param (pkey, OSSL_PKEY_PARAM_EC_PUB_Y, &y), ==, 1);
+  g_assert_cmpint (BN_bn2binpad (x, x_be, sizeof (x_be)), ==, TLS_EC_COORD_SIZE);
+  g_assert_cmpint (BN_bn2binpad (y, y_be, sizeof (y_be)), ==, TLS_EC_COORD_SIZE);
+
+  g_assert_cmpint (point[0], ==, 0x04);
+  g_assert_cmpmem (point + 1, TLS_EC_COORD_SIZE, x_be, TLS_EC_COORD_SIZE);
+  g_assert_cmpmem (point + 1 + TLS_EC_COORD_SIZE, TLS_EC_COORD_SIZE,
+                   y_be, TLS_EC_COORD_SIZE);
+
+  BN_free (x);
+  BN_free (y);
+  EVP_PKEY_free (pkey);
+}
+
+static void
+test_kex_point_short_buffer (void)
+{
+  EVP_PKEY *pkey = generate_p256_key ();
+  guint8 point[2 * TLS_EC_COORD_SIZE];
+  gsize written = 99;
+
+  g_assert_false (validity_tls_get_ec_pubpoint (pkey, point, sizeof (point), &written));
+  g_assert_cmpuint (written, ==, 0);
+
+  EVP_PKEY_free (pkey);
+}
+
+/* ================================================================
  * Test: Build ClientHello produces valid TLS record
  * ================================================================ */
 static void
@@ -6989,6 +7062,10 @@ main (int argc, char *argv[])
                    test_flash_parse_truncated);
   g_test_add_func ("/validity/tls/init-free", test_init_free);
   g_test_add_func ("/validity/tls/client-hello", test_build_client_hello);
+  g_test_add_func ("/validity/tls/regression/kex-point-uncompressed",
+                   test_kex_point_uncompressed);
+  g_test_add_func ("/validity/tls/kex-point/short-buffer",
+                   test_kex_point_short_buffer);
   g_test_add_func ("/validity/tls/unwrap/invalid", test_unwrap_invalid);
 
   /* TLS regression tests */

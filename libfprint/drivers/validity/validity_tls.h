@@ -219,6 +219,14 @@ gboolean validity_tls_parse_server_hello (ValidityTlsState *tls,
                                           gsize             data_len,
                                           GError          **error);
 
+/* Write an EC P-256 public key as a 65-byte uncompressed point (0x04 || x || y),
+ * whatever the key's own point conversion format. *written is set to the bytes
+ * written (0 on failure). Exposed for the unit tests. */
+gboolean validity_tls_get_ec_pubpoint (EVP_PKEY *pkey,
+                                       guint8   *out,
+                                       gsize     out_len,
+                                       gsize    *written);
+
 /* Build Certificate + ClientKeyExchange + CertVerify + ChangeCipherSpec + Finished */
 guint8  *validity_tls_build_client_finish (ValidityTlsState *tls,
                                            gsize            *out_len);
