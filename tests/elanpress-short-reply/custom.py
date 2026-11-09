@@ -51,5 +51,11 @@ d.close_sync()
 expect_short_reply('0x83', d.open_sync,
                    message="Short reply on endpoint 0x83, then none")
 
+# the failed open must have closed the USB device again, or this open fails
+# with "is already open" and every later open of the device would too
+usb = d.get_property('fpi-usb-device')
+usb.open()
+usb.close()
+
 del d
 del c
