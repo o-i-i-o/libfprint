@@ -273,6 +273,11 @@ usb:v298Dp2020*
  ID_AUTOSUSPEND=1
  ID_PERSIST=0
 
+# Supported by libfprint driver petaicmoc
+usb:v28E9p5151*
+ ID_AUTOSUSPEND=1
+ ID_PERSIST=0
+
 # Supported by libfprint driver realtek
 usb:v0BDAp5813*
 usb:v0BDAp5816*
