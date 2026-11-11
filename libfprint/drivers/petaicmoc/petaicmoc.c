@@ -534,6 +534,14 @@ identify_result_cb (FpiDevicePetaicMoc *self,
 
   RETURN_IF_ERROR (self, error);
 
+  /* Empty database is not an error: there is simply nothing to match against */
+  if (resp->event == PETAIC_EV_ENROLLED_TABLE_IS_EMPTY)
+    {
+      fpi_device_identify_report (device, NULL, NULL, NULL);
+      fpi_ssm_next_state (self->task_ssm);
+      return;
+    }
+
   if (resp->event != PETAIC_EV_OK)
     {
       fpi_ssm_mark_failed (self->task_ssm, event_error (resp->event, "Matching"));

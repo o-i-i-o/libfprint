@@ -48,6 +48,7 @@ G_DECLARE_FINAL_TYPE (FpiDevicePetaicMoc, fpi_device_petaicmoc, FPI, DEVICE_PETA
 
 /* Response event codes (response byte 4) */
 #define PETAIC_EV_OK 0x01
+#define PETAIC_EV_ENROLLED_TABLE_IS_EMPTY 0x10
 #define PETAIC_EV_RECORD_NOT_FOUND 0x26
 #define PETAIC_EV_ENROLL_NEED_MORE 0xA6
 #define PETAIC_EV_ENROLL_DONE 0xA7
