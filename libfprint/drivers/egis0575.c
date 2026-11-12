@@ -210,6 +210,11 @@ process_imgs (FpiSsm *ssm, FpDevice *dev)
           fpi_image_device_image_captured (img_self, resizedImage);
         }
 
+      /* The device stays active between enroll stages: drop the frames of
+       * this swipe so they are not stitched into the next image. */
+      g_slist_free_full (g_steal_pointer (&self->strips), g_free);
+      self->strips_len = 0;
+
       fpi_image_device_report_finger_status (img_self, FALSE);
     }
 }
@@ -359,16 +364,18 @@ packet_ssm_run_state (FpiSsm *ssm, FpDevice *dev)
   switch(fpi_ssm_get_cur_state (ssm))
     {
     case PACKET_SSM_REQ: // sends current package
-      Packet pkt = self->pkt_array[self->current_index];
-      transfer = fpi_usb_transfer_new (dev);
+      {
+        Packet pkt = self->pkt_array[self->current_index];
+        transfer = fpi_usb_transfer_new (dev);
 
-      fpi_usb_transfer_fill_bulk_full (transfer, EGIS0575_EPOUT, pkt.sequence, pkt.length, NULL);
+        fpi_usb_transfer_fill_bulk_full (transfer, EGIS0575_EPOUT, pkt.sequence, pkt.length, NULL);
 
-      transfer->ssm = ssm;
-      transfer->short_is_error = TRUE;
+        transfer->ssm = ssm;
+        transfer->short_is_error = TRUE;
 
-      fpi_usb_transfer_submit (transfer, EGIS0575_TIMEOUT, NULL, fpi_ssm_usb_transfer_cb, NULL);
-      break;
+        fpi_usb_transfer_submit (transfer, EGIS0575_TIMEOUT, NULL, fpi_ssm_usb_transfer_cb, NULL);
+        break;
+      }
 
     case PACKET_SSM_RESP: // recevies response
       transfer = fpi_usb_transfer_new (dev);
@@ -398,7 +405,11 @@ loop_complete (FpiSsm *ssm, FpDevice *dev, GError *error)
 
   self->running = FALSE;
 
-  if (error)
+  /* A pending deactivation is completed here (also on error), otherwise
+   * the device would never leave the DEACTIVATING state. */
+  if (self->stop)
+    fpi_image_device_deactivate_complete (img_dev, error);
+  else if (error)
     fpi_image_device_session_error (img_dev, error);
 }
 
@@ -413,7 +424,9 @@ setup_ssm_run_state (FpiSsm *ssm, FpDevice *dev)
     {
     case SSM_SETUP_START:
 
-      self->calibration_sequence = g_malloc (sizeof (unsigned char) * EGIS0575_IMGSIZE);
+      /* setup runs on every open: do not leak the previous buffer */
+      g_free (self->calibration_sequence);
+      self->calibration_sequence = g_malloc0 (EGIS0575_IMGSIZE);
 
       fpi_ssm_next_state (ssm);
 
@@ -534,29 +547,31 @@ setup_ssm_run_state (FpiSsm *ssm, FpDevice *dev)
          It is caused because i was to lazy making a loop that waits for a specific resopnse, see egis0575.h EGIS0575_GET_CALIBRATION_BYTES_PACKETS
        */
 
-      unsigned char last_byte = self->calibration_sequence[EGIS0575_IMGSIZE - 1];
-      gboolean cal_broken = TRUE;
+      {
+        unsigned char last_byte = self->calibration_sequence[EGIS0575_IMGSIZE - 1];
+        gboolean cal_broken = TRUE;
 
-      for(int i = EGIS0575_IMGSIZE - 2; i > EGIS0575_IMGSIZE - 100; i--)
-        {
-          if(self->calibration_sequence[i] != last_byte)
-            {
-              cal_broken = FALSE;
-              break;
-            }
-        }
+        for(int i = EGIS0575_IMGSIZE - 2; i > EGIS0575_IMGSIZE - 100; i--)
+          {
+            if(self->calibration_sequence[i] != last_byte)
+              {
+                cal_broken = FALSE;
+                break;
+              }
+          }
 
-      if(cal_broken)
-        {
-          fp_dbg ("Setup calibration package is broken, please retry");
-          g_clear_pointer (&self->calibration_sequence, g_free);
+        if(cal_broken)
+          {
+            fp_dbg ("Setup calibration package is broken, please retry");
+            g_clear_pointer (&self->calibration_sequence, g_free);
 
-          fpi_ssm_mark_failed (ssm, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_CANCELLED, "Setup calibration package broken, retry later"));
-          return;
-        }
+            fpi_ssm_mark_failed (ssm, fpi_device_error_new_msg (FP_DEVICE_ERROR_GENERAL, "Setup calibration package broken, retry later"));
+            return;
+          }
 
-      fpi_ssm_mark_completed (ssm);
-      break;
+        fpi_ssm_mark_completed (ssm);
+        break;
+      }
     }
 }
 
@@ -672,9 +687,8 @@ img_ssm_run_state (FpiSsm *ssm, FpDevice *dev)
     case IMG_SSM_FINGER_REQ:
       if(self->stop)
         {
+          /* loop_complete() reports the deactivation */
           fpi_ssm_mark_completed (ssm);
-          self->running = FALSE;
-          fpi_image_device_deactivate_complete (FP_IMAGE_DEVICE (dev), NULL);
           return;
         }
 
@@ -755,6 +769,8 @@ img_ssm_run_state (FpiSsm *ssm, FpDevice *dev)
     case IMG_SSM_FREE_DATA:
       g_slist_free_full (g_steal_pointer (&self->strips), g_free);
       self->strips_len = 0;
+      /* cleanup state: must advance, or loop_complete() is never called */
+      fpi_ssm_next_state (ssm);
       break;
 
     default:
@@ -803,7 +819,11 @@ dev_init (FpImageDevice *dev)
   fp_dbg ("EGIS INIT");
   GError *error = NULL;
 
-  g_usb_device_claim_interface (fpi_device_get_usb_device (FP_DEVICE (dev)), 0, 0, &error);
+  if (!g_usb_device_claim_interface (fpi_device_get_usb_device (FP_DEVICE (dev)), 0, 0, &error))
+    {
+      fpi_image_device_open_complete (dev, error);
+      return;
+    }
 
   FpiSsm *setup_ssm = fpi_ssm_new (FP_DEVICE (dev), setup_ssm_run_state, SSM_SETUP_DONE);
 
@@ -877,6 +897,9 @@ fpi_device_egis0575_finalize (GObject *this)
   FpDeviceEgis0575 *self = FPI_DEVICE_EGIS0575 (this);
 
   g_clear_pointer (&self->calibration_sequence, g_free);
+  g_slist_free_full (g_steal_pointer (&self->strips), g_free);
+
+  G_OBJECT_CLASS (fpi_device_egis0575_parent_class)->finalize (this);
 }
 
 static void
