@@ -31,6 +31,14 @@ static const FpIdEntry id_table[] = {
   { .vid = 0x0bda,  .pid = 0x5816,  },
   { .vid = 0x2541,  .pid = 0xfa03,  },
   { .vid = 0x3274,  .pid = 0x9003,  },
+  { .vid = 0x3274,  .pid = 0x9011,
+    .driver_data = FP_RTK_QUIRK_NO_TEMPLATE_STATUS |
+                   FP_RTK_QUIRK_NORMALIZE_SUBFACTOR |
+                   FP_RTK_QUIRK_CAPTURE_PARAMS |
+                   FP_RTK_QUIRK_EXACT_ENROLL_STAGES |
+                   FP_RTK_QUIRK_CAPTURE_POLL_DELAY |
+                   FP_RTK_QUIRK_CAPTURE_STATUS |
+                   FP_RTK_QUIRK_OPTIONAL_UPDATE_STATUS },
   { .vid = 0,  .pid = 0,  .driver_data = 0 },   /* terminating entry */
 };
 
@@ -118,6 +126,14 @@ fp_update_template_cb (FpiDeviceRealtek *self,
 {
   if (error)
     {
+      if (fpi_device_get_driver_data (FP_DEVICE (self)) & FP_RTK_QUIRK_OPTIONAL_UPDATE_STATUS)
+        {
+          fp_dbg ("Ignoring optional template update failure after match: %s", error->message);
+          g_error_free (error);
+          fpi_ssm_jump_to_state (self->task_ssm, FP_RTK_VERIFY_NUM_STATES);
+          return;
+        }
+
       fpi_ssm_mark_failed (self->task_ssm, error);
       return;
     }
@@ -140,10 +156,22 @@ fp_enroll_commit_cb (FpiDeviceRealtek *self,
 }
 
 static void
+fp_finish_capture_retry (FpDevice *device,
+                         gpointer  user_data)
+{
+  FpiDeviceRealtek *self = FPI_DEVICE_REALTEK (device);
+
+  if (self->task_ssm)
+    fpi_ssm_jump_to_state (self->task_ssm, fpi_ssm_get_cur_state (self->task_ssm));
+}
+
+static void
 fp_finish_capture_cb (FpiDeviceRealtek *self,
                       uint8_t          *buffer_in,
                       GError           *error)
 {
+  guint64 driver_data;
+
   if (error)
     {
       fpi_ssm_mark_failed (self->task_ssm, error);
@@ -160,6 +188,49 @@ fp_finish_capture_cb (FpiDeviceRealtek *self,
       return;
     }
 
+  driver_data = fpi_device_get_driver_data (FP_DEVICE (self));
+
+  if (driver_data & FP_RTK_QUIRK_CAPTURE_STATUS)
+    {
+      gint32 capture_metric;
+
+      memcpy (&capture_metric, buffer_in + 1, sizeof (capture_metric));
+      capture_metric = GINT32_FROM_LE (capture_metric);
+
+      if (buffer_in[0] == 1 && capture_metric > 0)
+        {
+          fpi_device_report_finger_status_changes (FP_DEVICE (self),
+                                                   FP_FINGER_STATUS_PRESENT,
+                                                   FP_FINGER_STATUS_NEEDED);
+          fpi_device_add_timeout (FP_DEVICE (self), CAPTURE_POLL_INTERVAL_9011,
+                                  fp_finish_capture_retry, NULL, NULL);
+          return;
+        }
+
+      if (buffer_in[0] == 0 && capture_metric > 0)
+        {
+          fp_dbg ("Capture completed (metric %d)", capture_metric);
+          fpi_device_report_finger_status_changes (FP_DEVICE (self),
+                                                   FP_FINGER_STATUS_PRESENT,
+                                                   FP_FINGER_STATUS_NEEDED);
+          fpi_ssm_next_state (self->task_ssm);
+          return;
+        }
+
+      if (capture_metric == 0 || capture_metric == -9)
+        {
+          fpi_device_add_timeout (FP_DEVICE (self), CAPTURE_POLL_INTERVAL_9011,
+                                  fp_finish_capture_retry, NULL, NULL);
+          return;
+        }
+
+      fpi_ssm_mark_failed (self->task_ssm,
+                           fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
+                                                     "Unexpected capture status 0x%02x, metric %d",
+                                                     buffer_in[0], capture_metric));
+      return;
+    }
+
   gint capture_status = buffer_in[0];
   if (capture_status == 0)
     {
@@ -170,8 +241,12 @@ fp_finish_capture_cb (FpiDeviceRealtek *self,
     }
   else
     {
-      fpi_ssm_jump_to_state (self->task_ssm,
-                             fpi_ssm_get_cur_state (self->task_ssm));
+      if (driver_data & FP_RTK_QUIRK_CAPTURE_POLL_DELAY)
+        fpi_device_add_timeout (FP_DEVICE (self), CAPTURE_POLL_INTERVAL_9011,
+                                fp_finish_capture_retry, NULL, NULL);
+      else
+        fpi_ssm_jump_to_state (self->task_ssm,
+                               fpi_ssm_get_cur_state (self->task_ssm));
     }
 }
 
@@ -206,6 +281,20 @@ fp_accept_sample_cb (FpiDeviceRealtek *self,
           fpi_ssm_mark_failed (self->task_ssm,
                                fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
                                                          "Command error!"));
+          return;
+        }
+
+      if ((fpi_device_get_driver_data (FP_DEVICE (self)) & FP_RTK_QUIRK_EXACT_ENROLL_STAGES) &&
+          in_status == FP_RTK_SUCCESS)
+        {
+          self->enroll_stage++;
+          fpi_device_enroll_progress (FP_DEVICE (self), self->enroll_stage, NULL, NULL);
+
+          if (self->enroll_stage < self->max_enroll_stage)
+            fpi_ssm_jump_to_state (self->task_ssm, FP_RTK_ENROLL_CAPTURE);
+          else
+            fpi_ssm_next_state (self->task_ssm);
+
           return;
         }
 
@@ -260,6 +349,11 @@ fp_print_from_data (FpiDeviceRealtek *self, uint8_t *buffer)
 
   userid = g_strndup ((gchar *) buffer + 1, DEFAULT_UID_LEN);
   finger = *(buffer);
+  if (fpi_device_get_driver_data (FP_DEVICE (self)) & FP_RTK_QUIRK_NORMALIZE_SUBFACTOR)
+    {
+      fp_dbg ("Normalizing template subfactor 0x%02x to 0x%02x", finger, SUB_FINGER_01);
+      finger = SUB_FINGER_01;
+    }
 
   print = fp_print_new (FP_DEVICE (self));
   userid_len = MIN (DEFAULT_UID_LEN, strlen (userid));
@@ -440,6 +534,7 @@ fp_get_enroll_num_cb (FpiDeviceRealtek *self,
     }
 
   self->template_num = buffer_in[1];
+  fp_dbg ("Device reports %d template slots", self->template_num);
 
   fpi_ssm_next_state (self->task_ssm);
 }
@@ -594,6 +689,7 @@ parse_status (guint8 *buffer, gint status_type)
       break;
 
     case FP_RTK_MSG_DEFAULT:
+    case FP_RTK_MSG_OPTIONAL_STATUS:
       return buffer[0];
       break;
 
@@ -657,9 +753,34 @@ fp_cmd_receive_cb (FpiUsbTransfer *transfer,
     }
 
   /* get status */
-  status_flag = parse_status (transfer->buffer, self->message_type);
+  if (self->message_type == FP_RTK_MSG_OPTIONAL_STATUS &&
+      transfer->actual_length >= 5 && transfer->buffer[0] == 1)
+    {
+      gint32 status_detail;
+
+      memcpy (&status_detail, transfer->buffer + 1, sizeof (status_detail));
+      status_detail = GINT32_FROM_LE (status_detail);
+
+      if (status_detail == -9)
+        {
+          fp_dbg ("Optional template update was not applied");
+          status_flag = 0;
+        }
+      else
+        {
+          status_flag = parse_status (transfer->buffer, self->message_type);
+        }
+    }
+  else
+    {
+      status_flag = parse_status (transfer->buffer, self->message_type);
+    }
   if (status_flag != 0)
     {
+      if (transfer->actual_length >= 5)
+        fp_dbg ("Command status failed: %02x %02x %02x %02x %02x",
+                transfer->buffer[0], transfer->buffer[1], transfer->buffer[2],
+                transfer->buffer[3], transfer->buffer[4]);
       fpi_ssm_mark_failed (transfer->ssm,
                            fpi_device_error_new_msg (FP_DEVICE_ERROR_PROTO,
                                                      "Status check failed"));
@@ -959,6 +1080,40 @@ fp_delete_ssm_done (FpiSsm *ssm, FpDevice *dev, GError *error)
   self->task_ssm = NULL;
 }
 
+static FpRtkMsgType
+rtk_template_status_policy (FpDevice *device)
+{
+  if (fpi_device_get_driver_data (device) & FP_RTK_QUIRK_NO_TEMPLATE_STATUS)
+    return FP_RTK_MSG_NO_STATUS;
+
+  return FP_RTK_MSG_DEFAULT;
+}
+
+static guint8
+rtk_capture_mode (FpiDeviceRealtek *self)
+{
+  if (!(fpi_device_get_driver_data (FP_DEVICE (self)) & FP_RTK_QUIRK_CAPTURE_PARAMS))
+    return 0;
+
+  return self->fp_purpose == FP_RTK_PURPOSE_ENROLL ? 2 : 1;
+}
+
+static void
+rtk_prepare_capture_command (FpiDeviceRealtek    *self,
+                             struct rtk_cmd_bulk *cmd)
+{
+  if (fpi_device_get_driver_data (FP_DEVICE (self)) & FP_RTK_QUIRK_CAPTURE_PARAMS)
+    {
+      cmd->param[0] = self->fp_purpose;
+      cmd->param[1] = rtk_capture_mode (self);
+    }
+  else
+    {
+      cmd->param[0] = 0;
+      cmd->param[1] = 0;
+    }
+}
+
 static void
 fp_verify_sm_run_state (FpiSsm *ssm, FpDevice *device)
 {
@@ -979,7 +1134,8 @@ fp_verify_sm_run_state (FpiSsm *ssm, FpDevice *device)
       co_get_template.data_len[0] = GET_LEN_L (self->template_len * self->template_num);
       co_get_template.data_len[1] = GET_LEN_H (self->template_len * self->template_num);
       cmd_buf = (guint8 *) &co_get_template;
-      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_verify_get_template_cb);
+      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, rtk_template_status_policy (device), 0,
+                           fp_verify_get_template_cb);
       break;
 
     case FP_RTK_VERIFY_CAPTURE:
@@ -987,11 +1143,13 @@ fp_verify_sm_run_state (FpiSsm *ssm, FpDevice *device)
                                                FP_FINGER_STATUS_NEEDED,
                                                FP_FINGER_STATUS_NONE);
 
+      rtk_prepare_capture_command (self, &co_start_capture);
       cmd_buf = (guint8 *) &co_start_capture;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_task_ssm_generic_cb);
       break;
 
     case FP_RTK_VERIFY_FINISH_CAPTURE:
+      rtk_prepare_capture_command (self, &co_finish_capture);
       cmd_buf = (guint8 *) &co_finish_capture;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_finish_capture_cb);
       break;
@@ -1003,17 +1161,24 @@ fp_verify_sm_run_state (FpiSsm *ssm, FpDevice *device)
       break;
 
     case FP_RTK_VERIFY_INDENTIFY_FEATURE:
+      nor_identify_feature.param[0] = 0;
+      nor_identify_feature.param[1] = rtk_capture_mode (self);
       cmd_buf = (guint8 *) &nor_identify_feature;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_NO_STATUS, 0, fp_identify_feature_cb);
       break;
 
     case FP_RTK_VERIFY_UPDATE_TEMPLATE:
       cmd_buf = (guint8 *) &co_update_template;
-      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_update_template_cb);
+      rtk_sensor_bulk_cmd (self, cmd_buf, NULL,
+                           (fpi_device_get_driver_data (device) & FP_RTK_QUIRK_OPTIONAL_UPDATE_STATUS) ?
+                           FP_RTK_MSG_OPTIONAL_STATUS : FP_RTK_MSG_DEFAULT,
+                           0, fp_update_template_cb);
       break;
 
     case FP_RTK_VERIFY_CANCEL_CAPTURE:
       co_cancel_capture.param[0] = self->fp_purpose;
+      co_cancel_capture.param[1] =
+        (fpi_device_get_driver_data (device) & FP_RTK_QUIRK_CAPTURE_PARAMS) ? 2 : 0;
       cmd_buf = (guint8 *) &co_cancel_capture;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_task_ssm_generic_cb);
       break;
@@ -1048,7 +1213,8 @@ fp_enroll_sm_run_state (FpiSsm *ssm, FpDevice *device)
       co_get_template.data_len[1] = GET_LEN_H (self->template_len * self->template_num);
 
       cmd_buf = (guint8 *) &co_get_template;
-      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_enroll_get_template_cb);
+      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, rtk_template_status_policy (device), 0,
+                           fp_enroll_get_template_cb);
       break;
 
     case FP_RTK_ENROLL_BEGIN_POS:
@@ -1062,11 +1228,13 @@ fp_enroll_sm_run_state (FpiSsm *ssm, FpDevice *device)
                                                FP_FINGER_STATUS_NEEDED,
                                                FP_FINGER_STATUS_NONE);
 
+      rtk_prepare_capture_command (self, &co_start_capture);
       cmd_buf = (guint8 *) &co_start_capture;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_task_ssm_generic_cb);
       break;
 
     case FP_RTK_ENROLL_FINISH_CAPTURE:
+      rtk_prepare_capture_command (self, &co_finish_capture);
       cmd_buf = (guint8 *) &co_finish_capture;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_finish_capture_cb);
       break;
@@ -1112,7 +1280,9 @@ fp_enroll_sm_run_state (FpiSsm *ssm, FpDevice *device)
 
       g_debug ("user_id: %s, finger: 0x%x", user_id, finger);
 
-      nor_enroll_commit.param[0] = SUB_FINGER_01;
+      nor_enroll_commit.param[0] =
+        (fpi_device_get_driver_data (device) & FP_RTK_QUIRK_NORMALIZE_SUBFACTOR) ?
+        SUB_FINGER_9011 : SUB_FINGER_01;
       nor_enroll_commit.data_len[0] = GET_LEN_L (payload_len);
       nor_enroll_commit.data_len[1] = GET_LEN_H (payload_len);
 
@@ -1123,6 +1293,8 @@ fp_enroll_sm_run_state (FpiSsm *ssm, FpDevice *device)
 
     case FP_RTK_ENROLL_CANCEL_CAPTURE:
       co_cancel_capture.param[0] = self->fp_purpose;
+      co_cancel_capture.param[1] =
+        (fpi_device_get_driver_data (device) & FP_RTK_QUIRK_CAPTURE_PARAMS) ? 2 : 0;
       cmd_buf = (guint8 *) &co_cancel_capture;
       rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_task_ssm_generic_cb);
     }
@@ -1174,7 +1346,8 @@ fp_delete_sm_run_state (FpiSsm *ssm, FpDevice *device)
       co_get_template.data_len[1] = GET_LEN_H (self->template_len * self->template_num);
 
       cmd_buf = (guint8 *) &co_get_template;
-      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 0, fp_get_delete_pos_cb);
+      rtk_sensor_bulk_cmd (self, cmd_buf, NULL, rtk_template_status_policy (device), 0,
+                           fp_get_delete_pos_cb);
       break;
 
     case FP_RTK_DELETE_PRINT:
@@ -1269,7 +1442,11 @@ dev_probe (FpDevice *device)
   if (product)
     fp_dbg ("Device name: %s", product);
 
-  self->max_enroll_stage = MAX_ENROLL_SAMPLES;
+  if (fpi_device_get_driver_data (device) & FP_RTK_QUIRK_EXACT_ENROLL_STAGES)
+    self->max_enroll_stage = ENROLL_SAMPLES_9011;
+  else
+    self->max_enroll_stage = MAX_ENROLL_SAMPLES;
+
   fpi_device_set_nr_enroll_stages (device, self->max_enroll_stage);
 
   g_usb_device_release_interface (fpi_device_get_usb_device (FP_DEVICE (device)), 0, 0, NULL);
@@ -1380,7 +1557,7 @@ list_print (FpDevice *device)
   co_get_template.data_len[1] = GET_LEN_H (self->template_len * self->template_num);
 
   cmd_buf = (guint8 *) &co_get_template;
-  rtk_sensor_bulk_cmd (self, cmd_buf, NULL, FP_RTK_MSG_DEFAULT, 1, fp_list_cb);
+  rtk_sensor_bulk_cmd (self, cmd_buf, NULL, rtk_template_status_policy (device), 1, fp_list_cb);
 }
 
 static void
