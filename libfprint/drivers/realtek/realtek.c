@@ -536,8 +536,6 @@ fp_list_cb (FpiDeviceRealtek *self,
             uint8_t          *buffer_in,
             GError           *error)
 {
-  gboolean found = FALSE;
-
   g_autoptr(GPtrArray) list_result = NULL;
 
   if (error)
@@ -555,20 +553,14 @@ fp_list_cb (FpiDeviceRealtek *self,
           FpPrint *print = NULL;
           print = fp_print_from_data (self, buffer_in + i * self->template_len + SUBFACTOR_OFFSET);
           g_ptr_array_add (list_result, g_object_ref_sink (print));
-          found = TRUE;
         }
     }
 
-  if (!found)
-    {
-      fpi_device_list_complete (FP_DEVICE (self),
-                                g_steal_pointer (&list_result),
-                                fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_FULL,
-                                                          "Database is empty"));
-      return;
-    }
+  if (list_result->len == 0)
+    fp_info ("Database is empty");
+  else
+    fp_info ("Query templates complete!");
 
-  fp_info ("Query templates complete!");
   fpi_device_list_complete (FP_DEVICE (self),
                             g_steal_pointer (&list_result),
                             NULL);
