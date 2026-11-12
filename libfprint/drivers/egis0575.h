@@ -50,6 +50,10 @@
 
 #define EGIS0575_TIMEOUT 10000
 
+/* status polling: delay between polls (ms) and number of polls before giving up */
+#define EGIS0575_POLL_DELAY 10
+#define EGIS0575_MAX_POLLS 300
+
 // with 10 frames it takes a really long swipe to get an image
 #define EGIS0575_CONSECUTIVE_CAPTURES 10 // how many frames get captured
 #define EGIS0575_CAPTURE_DELAY 50 // how long to wait between each capture
