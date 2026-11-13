@@ -259,10 +259,14 @@ cmd_interrupt_cb (FpiUsbTransfer *transfer,
     }
   else
     {
+      FpiDeviceSynaptics *self = FPI_DEVICE_SYNAPTICS (device);
+
+      /* Keep the wait cancellable: without the cancellable, cancel() and
+       * suspend() cannot interrupt this transfer and the command never ends. */
       fpi_device_critical_leave (device);
       fpi_usb_transfer_submit (fpi_usb_transfer_ref (transfer),
                                0,
-                               NULL,
+                               self->interrupt_cancellable,
                                cmd_interrupt_cb,
                                NULL);
     }
