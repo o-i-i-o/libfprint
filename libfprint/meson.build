@@ -139,6 +139,29 @@ driver_sources = {
     'focaltech_moc' : files('drivers/focaltech_moc/focaltech_moc.c'),
     'mafpmoc' : files('drivers/mafpmoc/mafpmoc.c'),
     'secugen' : files('drivers/secugen.c'),
+    'canvasbio_cb2000' : files(
+        'drivers/canvasbio_cb2000/canvasbio_cb2000.c',
+        'drivers/canvasbio_cb2000/cb2000_core.c',
+        'drivers/canvasbio_cb2000/cb2000_engine.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_adapter.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_compare.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_enroll.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_math.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_minutiae.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_pet.c',
+        'drivers/canvasbio_cb2000/cb2000_engine_score.c',
+        'drivers/canvasbio_cb2000/cb2000_print.c',
+        'drivers/canvasbio_cb2000/cb2000_protocol.c',
+        'drivers/canvasbio_cb2000/cb2000_tables.c',
+    ),
+}
+
+# Compiler flags needed by a single driver. Such a driver is built as its own
+# static library, so the flags do not reach the other drivers.
+driver_c_args = {
+    # The matcher reproduces the vendor engine's double arithmetic operation
+    # by operation, so a multiply and an add must never be fused implicitly.
+    'canvasbio_cb2000' : ['-ffp-contract=off'],
 }
 
 helper_sources = {
@@ -153,11 +176,16 @@ helper_sources = {
 
 drivers_sources = []
 drivers_cflags = []
+drivers_shared_sources = []
 foreach driver: drivers
     drivers_sources += driver_sources[driver]
+    if driver not in driver_c_args
+        drivers_shared_sources += driver_sources[driver]
+    endif
 endforeach
 foreach helper : driver_helpers
     drivers_sources += helper_sources[helper]
+    drivers_shared_sources += helper_sources[helper]
 endforeach
 
 
@@ -200,13 +228,15 @@ drivers_type_list += ''
 drivers_type_func += '  return drivers;'
 drivers_type_func += '}'
 
-drivers_sources += configure_file(input: 'empty_file',
+drivers_types_source = configure_file(input: 'empty_file',
     output: 'fpi-drivers.c',
     capture: true,
     command: [
         'echo',
         '\n'.join(drivers_type_list + [] + drivers_type_func)
     ])
+drivers_sources += drivers_types_source
+drivers_shared_sources += drivers_types_source
 
 deps = [
     enums_dep,
@@ -250,11 +280,24 @@ libfprint_private = static_library('fprint-private',
     link_with: libnbis,
     install: false)
 
+drivers_own_libs = []
+foreach driver: drivers
+    if driver in driver_c_args
+        drivers_own_libs += static_library('fprint-driver-' + driver,
+            sources: driver_sources[driver],
+            c_args: drivers_cflags + driver_c_args[driver],
+            dependencies: deps,
+            link_with: libfprint_private,
+            install: false)
+    endif
+endforeach
+
 libfprint_drivers = static_library('fprint-drivers',
-    sources: drivers_sources,
+    sources: drivers_shared_sources,
     c_args: drivers_cflags,
     dependencies: deps,
     link_with: libfprint_private,
+    link_whole: drivers_own_libs,
     install: false)
 
 mapfile = files('libfprint.ver')[0]
