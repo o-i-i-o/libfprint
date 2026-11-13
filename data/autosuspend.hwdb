@@ -148,13 +148,9 @@ usb:v04F3p0C30*
 usb:v04F3p0C31*
 usb:v04F3p0C32*
 usb:v04F3p0C33*
-usb:v04F3p0C3D*
 usb:v04F3p0C42*
-usb:v04F3p0C4B*
 usb:v04F3p0C4D*
 usb:v04F3p0C4F*
-usb:v04F3p0C63*
-usb:v04F3p0C6E*
 usb:v04F3p0C58*
  ID_AUTOSUSPEND=1
  ID_PERSIST=0
@@ -178,6 +174,14 @@ usb:v04F3p0CB0*
 usb:v04F3p0CB2*
 usb:v04F3p0CB5*
 usb:v04F3p0CB6*
+ ID_AUTOSUSPEND=1
+ ID_PERSIST=0
+
+# Supported by libfprint driver elanpress
+usb:v04F3p0C3D*
+usb:v04F3p0C4B*
+usb:v04F3p0C63*
+usb:v04F3p0C6E*
  ID_AUTOSUSPEND=1
  ID_PERSIST=0
 
