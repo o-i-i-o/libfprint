@@ -566,6 +566,8 @@ elanspi_mean_image (FpiDeviceElanSpi *self, const guint16 *img)
 {
   int total = 0;
 
+  g_assert (self->sensor_width && self->sensor_height);
+
   for (int i = 0; i < self->sensor_width * self->sensor_height; i += 1)
     total += img[i];
   return total / (self->sensor_width * self->sensor_height);
