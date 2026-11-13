@@ -362,6 +362,7 @@ cmd_ssm_done (FpiSsm *ssm, FpDevice *dev, GError *error)
   SynCmdMsgCallback callback = fpi_ssm_get_data (ssm);
 
   self->cmd_ssm = NULL;
+  self->cmd_cancel_on_resume = FALSE;
 
   /* Notify about the SSM failure from here instead. */
   if (error || self->cmd_complete_on_removal)
@@ -1463,6 +1464,15 @@ cancel (FpDevice *dev)
 {
   FpiDeviceSynaptics *self = FPI_DEVICE_SYNAPTICS (dev);
 
+  /* While suspended no transfer is in flight, so nothing would read the
+   * reply to a cancel sent now; the sensor then stops accepting commands.
+   * Send it from resume() instead, where the reply is read. */
+  if (self->cmd_suspended)
+    {
+      self->cmd_cancel_on_resume = TRUE;
+      return;
+    }
+
   /* We just send out a cancel command and hope for the best. */
   synaptics_sensor_cmd (self, -1, BMKT_CMD_CANCEL_OP, NULL, 0, NULL);
 
@@ -1521,8 +1531,19 @@ resume (FpDevice *dev)
   g_assert (fpi_ssm_get_cur_state (self->cmd_ssm) == SYNAPTICS_CMD_SUSPENDED);
   self->cmd_suspended = FALSE;
 
-  /* Restart interrupt transfer. */
-  fpi_ssm_jump_to_state (self->cmd_ssm, SYNAPTICS_CMD_RESUME);
+  if (self->cmd_cancel_on_resume)
+    {
+      /* A cancel arrived while suspended: send it now and read the reply. */
+      self->cmd_cancel_on_resume = FALSE;
+      synaptics_sensor_cmd (self, -1, BMKT_CMD_CANCEL_OP, NULL, 0, NULL);
+      fpi_device_critical_enter (dev);
+      fpi_ssm_jump_to_state (self->cmd_ssm, SYNAPTICS_CMD_GET_RESP);
+    }
+  else
+    {
+      /* Restart interrupt transfer. */
+      fpi_ssm_jump_to_state (self->cmd_ssm, SYNAPTICS_CMD_RESUME);
+    }
 
   fpi_device_resume_complete (dev, NULL);
 }
