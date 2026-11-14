@@ -64,6 +64,7 @@ drivers_tests = {
     'focaltech_moc-6553': {},
     'mafpmoc': {},
     'secugen': {},
+    'goodix5042': { 'timeout': 120 },
 }
 
 if get_option('introspection')
