@@ -3130,6 +3130,27 @@ test_driver_list_error (void)
 }
 
 static void
+test_driver_list_cancelled (void)
+{
+  g_autoptr(GError) error = NULL;
+  g_autoptr(FpAutoCloseDevice) device = auto_close_fake_device_new ();
+  g_autoptr(GCancellable) cancellable = g_cancellable_new ();
+  g_autoptr(GPtrArray) expected = make_fake_prints_gallery (device, 1);
+  g_autoptr(GPtrArray) prints = NULL;
+  FpiDeviceFake *fake_dev = FPI_DEVICE_FAKE (device);
+
+  fake_dev->ret_list = expected;
+  fake_dev->last_called_function = NULL;
+  g_cancellable_cancel (cancellable);
+
+  prints = fp_device_list_prints_sync (device, cancellable, &error);
+
+  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+  g_assert_null (prints);
+  g_assert_null (fake_dev->last_called_function);
+}
+
+static void
 test_driver_list_no_storage (void)
 {
   g_autoptr(FpAutoResetClass) dev_class = auto_reset_device_class ();
@@ -4163,6 +4184,7 @@ main (int argc, char *argv[])
   g_test_add_func ("/driver/capture/error", test_driver_capture_error);
   g_test_add_func ("/driver/list", test_driver_list);
   g_test_add_func ("/driver/list/error", test_driver_list_error);
+  g_test_add_func ("/driver/list/cancelled", test_driver_list_cancelled);
   g_test_add_func ("/driver/list/no_storage", test_driver_list_no_storage);
   g_test_add_func ("/driver/delete", test_driver_delete);
   g_test_add_func ("/driver/delete/error", test_driver_delete_error);
