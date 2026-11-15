@@ -46,10 +46,21 @@
 #define CMD_TIMEOUT 1000
 #define DATA_TIMEOUT 5000
 #define STATUS_TIMEOUT 2000
+#define CAPTURE_POLL_INTERVAL_9011 75
 
 #define MAX_ENROLL_SAMPLES 8
+#define ENROLL_SAMPLES_9011 12
 #define DEFAULT_UID_LEN 28
 #define SUB_FINGER_01 0xFF
+#define SUB_FINGER_9011 0xF7
+
+#define FP_RTK_QUIRK_NO_TEMPLATE_STATUS (1 << 0)
+#define FP_RTK_QUIRK_NORMALIZE_SUBFACTOR (1 << 1)
+#define FP_RTK_QUIRK_CAPTURE_PARAMS (1 << 2)
+#define FP_RTK_QUIRK_EXACT_ENROLL_STAGES (1 << 3)
+#define FP_RTK_QUIRK_CAPTURE_POLL_DELAY (1 << 4)
+#define FP_RTK_QUIRK_CAPTURE_STATUS (1 << 5)
+#define FP_RTK_QUIRK_OPTIONAL_UPDATE_STATUS (1 << 6)
 
 #define GET_BULK_CMD_TYPE(val)              ((val & 0xC0) >> 6)
 #define GET_TRANS_DATA_LEN(len_h, len_l)    ((len_h << 8) | len_l)
@@ -76,6 +87,7 @@ typedef enum {
 typedef enum {
   FP_RTK_MSG_DEFAULT = 0,
   FP_RTK_MSG_NO_STATUS,
+  FP_RTK_MSG_OPTIONAL_STATUS,
 } FpRtkMsgType;
 
 typedef enum {
