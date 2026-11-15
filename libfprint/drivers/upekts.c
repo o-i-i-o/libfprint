@@ -413,6 +413,7 @@ read_msg_cb (FpiUsbTransfer *transfer, FpDevice *device,
       fp_dbg ("didn't fit in buffer, need to extend by %d bytes", needed);
       udata->buffer = g_realloc ((gpointer) udata->buffer, packet_len);
       udata->buflen = packet_len;
+      memset (udata->buffer + MSG_READ_BUF_SIZE, 0, needed);
 
       fpi_usb_transfer_fill_bulk_full (etransfer, EP_IN,
                                        udata->buffer + MSG_READ_BUF_SIZE,
@@ -444,6 +445,8 @@ __read_msg_async (FpDevice *device, struct read_msg_data *udata)
       udata->buflen = MSG_READ_BUF_SIZE;
     }
 
+  /* umockdev forwards incoming transfer buffers through its replay socket. */
+  memset (udata->buffer, 0, udata->buflen);
   fpi_usb_transfer_fill_bulk_full (transfer, EP_IN, udata->buffer, udata->buflen, NULL);
   fpi_usb_transfer_submit (transfer, TIMEOUT, NULL, read_msg_cb, udata);
 }
