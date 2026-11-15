@@ -2149,7 +2149,7 @@ fp_device_list_prints_sync (FpDevice     *device,
   g_return_val_if_fail (FP_IS_DEVICE (device), FALSE);
 
   fp_device_list_prints (device,
-                         NULL,
+                         cancellable,
                          async_result_ready, &task);
   while (!task)
     g_main_context_iteration (NULL, TRUE);
